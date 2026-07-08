@@ -19,20 +19,58 @@ enum MatchStatus {
   CANCL   // Cancelled
 }
 
+enum RoomStatus {
+  SETUP
+  OPEN
+  LOCKED
+  SETTLED
+  ARCHIVED
+}
+
+enum MarketCategory {
+  MATCH_RESULT
+  PLAYER
+  EVENT
+  FUN
+  CUSTOM
+}
+
+enum MarketStatus {
+  OPEN
+  LOCKED
+  SETTLED
+}
+
+enum BetResult {
+  PENDING
+  WON
+  LOST
+}
+
+enum PredictionResult {
+  PENDING
+  CORRECT   // Đúng
+  INCORRECT // Sai
+}
+
 model User {
   id            String            @id @default(uuid())
   email         String            @unique
   fullName      String
   avatarUrl     String?
   role          Role              @default(USER)
-  totalPoints   Int               @default(0)
+  totalPoints   Int               @default(200) // Cấp 200 điểm khởi đầu (UC01)
+  streakCurrent Int               @default(0)   // Chuỗi dự đoán đúng hiện tại (UC18)
+  streakMax     Int               @default(0)   // Chuỗi dự đoán đúng dài nhất (UC18)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
-  // Relationships
-  predictions   Prediction[]
-  createdLobbies Lobby[]          @relation("LobbyCreator")
-  lobbyMemberships LobbyMember[]
+  // Mối quan hệ
+  freePredictions FreePrediction[]
+  createdRooms    BettingRoom[]     @relation("RoomOwner")
+  roomPartnerships RoomCoOwner[]
+  roomMemberships  LobbyMember[]
+  placedBets       PlacedBet[]
 
   @@map("users")
 }
@@ -52,6 +90,12 @@ model Match {
   awayScore        Int         @default(0)
   minuteElapsed    Int         @default(0)
   
+  // Cache H2H, Đội hình & Thống kê trận đấu
+  lineupHome       Json?
+  lineupAway       Json?
+  h2hHistory       Json?
+  teamStats        Json?
+  
   // Cache AI Gemini
   aiWinProb        Float?      
   aiDrawProb       Float?      
@@ -61,60 +105,122 @@ model Match {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  // Relations
-  predictions      Prediction[]
-  lobbies          Lobby[]
+  // Mối quan hệ
+  freePredictions  FreePrediction[]
+  bettingRooms     BettingRoom[]
 
   @@map("matches")
 }
 
-model Prediction {
-  id                 String   @id @default(uuid())
+model FreePrediction {
+  id                 String           @id @default(uuid())
   userId             String
   matchId            String
   predictedHomeScore Int
   predictedAwayScore Int
-  isJoker            Boolean  @default(false) // Double points if exact score
-  pointsEarned       Int      @default(0)
-  isCalculated       Boolean  @default(false)
-  createdAt          DateTime @default(now())
+  predictedOutcome   String           // "NHA" | "HOA" | "KHACH" (UC06)
+  pointsEarned       Int              @default(0)
+  status             PredictionResult @default(PENDING)
+  createdAt          DateTime         @default(now())
 
-  // Relations
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  match              Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  // Mối quan hệ
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match              Match            @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
-  @@map("predictions")
+  @@map("free_predictions")
 }
 
-model Lobby {
+model BettingRoom {
   id           String        @id @default(uuid())
-  code         String        @unique 
-  name         String
-  creatorId    String
+  code         String        @unique // maMoi (mã PIN 6 ký tự)
+  name         String        // tenPhong
   matchId      String
+  ownerId      String        // idOwner
+  status       RoomStatus    @default(SETUP)
+  totalPool    Int           @default(0)    // tongQuy
+  maxMembers   Int           @default(20)   // soThanhVienToiDa (tối đa 20)
   createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  // Relations
-  creator      User          @relation("LobbyCreator", fields: [creatorId], references: [id])
+  // Mối quan hệ
+  owner        User          @relation("RoomOwner", fields: [ownerId], references: [id])
   match        Match         @relation(fields: [matchId], references: [id])
+  coOwners     RoomCoOwner[]
   members      LobbyMember[]
+  markets      BetMarket[]
+  placedBets   PlacedBet[]
 
-  @@map("lobbies")
+  @@map("betting_rooms")
+}
+
+model RoomCoOwner {
+  id           String      @id @default(uuid())
+  roomId       String
+  userId       String
+  contribution Int         @default(0) // dienGop
+  shareRatio   Float       @default(0) // tiLeSoHuu
+  joinedAt     DateTime    @default(now())
+
+  // Mối quan hệ
+  room         BettingRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@map("room_co_owners")
 }
 
 model LobbyMember {
-  id           String   @id @default(uuid())
-  lobbyId      String
+  id           String      @id @default(uuid())
+  roomId       String
   userId       String
-  pointsInRoom Int      @default(0) 
-  joinedAt     DateTime @default(now())
+  pointsInRoom Int         @default(0)
+  joinedAt     DateTime    @default(now())
 
-  // Relations
-  lobby        Lobby    @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Mối quan hệ
+  room         BettingRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([lobbyId, userId])
+  @@unique([roomId, userId])
   @@map("lobby_members")
+}
+
+model BetMarket {
+  id             String         @id @default(uuid())
+  roomId         String
+  title          String         // tieuDe
+  category       MarketCategory @default(MATCH_RESULT) // nhomTemplate (Kết quả trận, Cầu thủ, Sự kiện, Kèo vui, Tùy chỉnh)
+  options        Json           // Lựa chọn & hệ số: [{id, label, odd, totalBetPoints}]
+  status         MarketStatus   @default(OPEN)
+  winningOptionId String?       // idLuaChonThang
+  exposureLimit  Int            @default(0)    // gioiHanExposure
+  currentExposure Int           @default(0)    // exposureHienTai
+  createdAt      DateTime       @default(now())
+
+  // Mối quan hệ
+  room           BettingRoom    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  placedBets     PlacedBet[]
+
+  @@map("bet_markets")
+}
+
+model PlacedBet {
+  id             String     @id @default(uuid())
+  userId         String     // idNguoiDung
+  roomId         String     // idPhong
+  marketId       String     // idKeo
+  optionId       String     // idLuaChonDaChon
+  points         Int        // diem (số điểm cược)
+  odd            Float      // heSoTaiThoiDiemDat
+  result         BetResult  @default(PENDING) // ketQua (won | lost | pending)
+  payout         Int        @default(0)        // tienThuong
+  createdAt      DateTime   @default(now())   // thoiGianDat
+
+  // Mối quan hệ
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room           BettingRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  market         BetMarket  @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@map("placed_bets")
 }
 
 model News {
