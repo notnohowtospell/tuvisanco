@@ -1,71 +1,134 @@
-# FootballAI (Tử Vi Sân Cỏ) - Football Prediction & Betting App
+# ⚽ FootballAI (Tử Vi Sân Cỏ) - Monorepo Workspace
 
-Dự án này là không gian làm việc chính (monorepo-style) của nhóm cho đồ án môn **PRM393** (Kì 8). Thư mục này bao gồm cả **Frontend (Flutter)** và **Backend (NestJS + Docker PostgreSQL + WebSockets + Gemini AI)**.
-
----
-
-## 📂 Cấu Trúc Thư Mục Dự Án
-
-*   **`tuvisanco-frontend/`**: Ứng dụng di động (Android-only) viết bằng Flutter + Riverpod + GoRouter + Firebase Auth.
-*   **`tuvisanco-backend/`**: Hệ thống API Server viết bằng NestJS + Prisma ORM + PostgreSQL + Socket.io + Firebase Admin.
+FootballAI là ứng dụng di động hỗ trợ dự đoán tỷ số miễn phí (Luồng A) và tổ chức phòng đặt cược nhóm riêng tư thời gian thực (Luồng B - Core) dành cho những người yêu thích bóng đá. Dự án được phát triển theo mô hình Monorepo chứa cả mã nguồn Frontend và Backend phục vụ cho đồ án môn **PRM393** (Kỳ 8).
 
 ---
 
-## 🚀 Hướng Dẫn Khởi Chạy Nhanh Cho Cả Nhóm (Khi Pull Code Về)
+## 📂 Cấu Trúc Thư Mục Dự Án (Project Directory Tree)
 
-### 1. Khởi động CSDL PostgreSQL (qua Docker)
-Yêu cầu bật sẵn **Docker Desktop**.
-1.  Mở terminal tại thư mục backend:
+Dưới đây là sơ đồ tổ chức thư mục của dự án để các thành viên dễ dàng định vị mã nguồn:
+
+```text
+tuvisanco/
+├── tuvisanco-backend/             # API Server NestJS
+│   ├── prisma/                    # Cấu hình CSDL & Schema Prisma
+│   │   └── schema.prisma          # Thực thể DB (User, BettingRoom, BetMarket...)
+│   ├── src/
+│   │   ├── prisma/                # Prisma Service kết nối CSDL toàn cục
+│   │   ├── modules/               # Các phân hệ nghiệp vụ chính (Full-Stack)
+│   │   │   ├── auth/              # Xác thực Firebase Token & Đăng nhập Google
+│   │   │   ├── users/             # Quản lý Profile & BXH Global
+│   │   │   ├── matches/           # Đồng bộ lịch thi đấu (API-Football)
+│   │   │   ├── predictions/       # Dự đoán miễn phí & Streak Points Engine
+│   │   │   ├── lobbies/           # Phòng cược & Socket.io WebSockets Gateway
+│   │   │   ├── ai/                # Nhận định phân tích Gemini AI
+│   │   │   └── news/              # Bản tin bóng đá News Feed
+│   │   ├── app.module.ts          # Đăng ký kết nối toàn bộ các module
+│   │   └── main.ts                # Điểm khởi chạy API Server
+│   ├── docker-compose.yml         # Container PostgreSQL & pgAdmin
+│   ├── package.json
+│   └── tsconfig.json
+├── tuvisanco-frontend/            # Mobile App Client (Flutter)
+│   ├── android/                   # Cấu hình Native Android (Gradle, Keystore)
+│   ├── lib/
+│   │   ├── app/                   # Cấu hình cốt lõi (Giao diện Theme, GoRouter)
+│   │   ├── core/                  # Thư viện dùng chung (Dio HTTP Client, Widgets)
+│   │   ├── features/              # Các phân hệ tính năng theo chiều dọc (UI/UX)
+│   │   │   ├── auth/              # Login/Register UI & Firebase Auth Client
+│   │   │   ├── matches/           # Tab Lịch thi đấu & Màn chi tiết trận đấu
+│   │   │   ├── predictions/       # Phiếu cược (Bet Slip) & Form nhập dự đoán
+│   │   │   ├── lobbies/           # Phòng cược nhóm & Socket.io Client
+│   │   │   ├── leaderboard/       # Giao diện Bảng xếp hạng Top 50 toàn cầu
+│   │   │   └── news/              # Giao diện danh sách & chi tiết tin tức
+│   │   └── main.dart              # Khởi chạy app bọc trong Riverpod ProviderScope
+│   ├── pubspec.yaml               # Quản lý dependencies & tài nguyên của App
+│   └── README.md
+└── README.md                      # Tài liệu hướng dẫn tổng quan Monorepo
+```
+
+---
+
+## 🛠️ Công Nghệ Sử Dụng (Technology Stack)
+
+*   **Frontend Mobile:** Flutter SDK, Riverpod (Quản lý trạng thái), GoRouter (Định tuyến màn hình), Dio (REST Client), Socket.io Client (Realtime), Firebase Auth & Google Sign-In SDK.
+*   **Backend Server:** NestJS framework, Prisma ORM, Socket.io (WebSockets Gateway), Firebase Admin SDK.
+*   **Database & DevOps:** PostgreSQL 15, pgAdmin 4, Docker, Docker Compose.
+*   **AI Integration:** Google Gemini API (`gemini-1.5-flash`).
+
+---
+
+## 🚀 Hướng Dẫn Cài Đặt & Khởi Chạy (Quick Start)
+
+### 📋 Yêu Cầu Hệ Thống (Prerequisites)
+Đảm bảo máy tính của bạn đã cài đặt sẵn:
+*   [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Đã mở chạy)
+*   [Node.js](https://nodejs.org/) (Phiên bản v18 trở lên)
+*   [Flutter SDK](https://docs.flutter.dev/get-started/install) (Phiên bản 3.22+ trở lên)
+*   Thiết bị di động Android hoặc máy ảo Android (Emulator)
+
+---
+
+### Bước 1: Khởi động Database PostgreSQL (Docker)
+1.  Mở Terminal tại thư mục gốc dự án và di chuyển vào thư mục backend:
     ```bash
     cd tuvisanco-backend
     ```
-2.  Chạy container cơ sở dữ liệu:
+2.  Chạy container PostgreSQL dưới nền:
     ```bash
     docker-compose up -d
     ```
-    *   pgAdmin sẽ khả dụng tại: `http://localhost:5050` (Email: `admin@tuvisanco.com` / Pass: `admin`).
+    *   *pgAdmin* sẽ khả dụng tại địa chỉ: `http://localhost:5050` (Email: `admin@tuvisanco.com` / Pass: `admin`).
 
-### 2. Khởi chạy API Server NestJS
-1.  Đảm bảo đã dừng (stop) API Server nếu đang chạy để không bị khóa file trong quá trình đồng bộ (EPERM error).
-2.  Cấu hình tệp `.env` dựa theo tệp `.env.example`.
-3.  Đẩy cấu hình DB schema mới cập nhật vào PostgreSQL và sinh client:
+---
+
+### Bước 2: Đồng bộ CSDL & Chạy Server NestJS
+1.  Tạo tệp cấu hình `.env` từ tệp `.env.example` và điều chỉnh các API keys cần thiết.
+2.  Đẩy cấu hình bảng dữ liệu vào PostgreSQL và sinh mã nguồn Prisma Client:
     ```bash
     npx prisma db push
     npx prisma generate
     ```
-4.  Khởi chạy server ở chế độ phát triển:
+3.  Khởi chạy máy chủ phát triển NestJS:
     ```bash
     npm run start:dev
     ```
-    *   *Mách nhỏ:* Kiểm tra kết nối database bằng cách truy cập `http://localhost:3000/matches` trên trình duyệt, nếu ra mảng `[]` là thành công.
+    *(Mặc định máy chủ sẽ chạy tại cổng `3000`)*.
 
-### 3. Khởi chạy Ứng Dụng Flutter
-1.  Di chuyển vào thư mục frontend:
+---
+
+### Bước 3: Khởi chạy Ứng dụng di động Flutter
+1.  Mở một cửa sổ Terminal mới và di chuyển vào thư mục frontend:
     ```bash
-    cd ../tuvisanco-frontend
+    cd tuvisanco-frontend
     ```
-2.  Đảm bảo máy ảo Android hoặc thiết bị thật đã được kết nối.
-3.  Tải các thư viện và chạy ứng dụng:
+2.  Tải các gói thư viện Flutter cần thiết:
     ```bash
     flutter pub get
+    ```
+3.  Kết nối thiết bị và chạy ứng dụng:
+    ```bash
     flutter run
     ```
 
 ---
 
-## 🛠️ Quy Chuẩn & Mã Mẫu Đã Dựng Sẵn
+## 🤝 Quy Tắc Đóng Góp Code & Làm Việc Nhóm (Git Workflow)
 
-Để giúp nhóm phát triển nhanh và đồng nhất, tôi đã viết sẵn các tệp tin nền móng quan trọng sau:
+Để tránh xung đột code (conflict) khi 4 thành viên cùng làm việc, nhóm thống nhất tuân thủ quy chuẩn sau:
 
-### Phía Backend (`tuvisanco-backend/`)
-*   **Kết nối CSDL**: Module Prisma dùng chung tại `src/prisma/`.
-*   **Đăng ký & Xác thực Firebase Auth**: Lớp xử lý token của Google tại **[auth.service.ts](file:///D:/tuvisanco/tuvisanco-backend/src/modules/auth/auth.service.ts)**.
-*   **Thuật toán tính điểm dự đoán bóng đá**: Logic tính điểm chính xác, hiệu số và kết quả theo quy chuẩn website được lập trình tại **[predictions.service.ts](file:///D:/tuvisanco/tuvisanco-backend/src/modules/predictions/predictions.service.ts)**.
-*   **WebSockets Realtime Gateway**: Khung Socket.io room điều khiển realtime trong phòng chờ nhóm bạn bè tại **[lobbies.gateway.ts](file:///D:/tuvisanco/tuvisanco-backend/src/modules/lobbies/lobbies.gateway.ts)**.
-*   **Phân tích Gemini AI**: Nhận định xác suất tự động lưu cache được lập trình tại **[ai.service.ts](file:///D:/tuvisanco/tuvisanco-backend/src/modules/ai/ai.service.ts)**.
+### 1. Quy tắc đặt tên Nhánh (Branch Naming Convention)
+Mỗi thành viên làm việc trên một nhánh riêng biệt được đặt tên theo cú pháp:
+*   `feature/<tên-thành-viên>-<tên-chức-năng>` (Ví dụ: `feature/huy-room-betting`, `feature/cuong-ai-matches`)
+*   `fix/<tên-thành-viên>-<tên-lỗi>` (Ví dụ: `fix/duc-auth-token`)
 
-### Phía Frontend (`tuvisanco-frontend/`)
-*   **Định tuyến & Trang Mock**: Khai báo GoRouter và 5 màn hình mock ban đầu tại **[router.dart](file:///D:/tuvisanco/tuvisanco-frontend/lib/app/router.dart)**.
-*   **Bảng màu Dark/Light Mode**: Màu xanh sân cỏ Material 3 cấu hình tại **[theme.dart](file:///D:/tuvisanco/tuvisanco-frontend/lib/app/theme.dart)**.
-*   **Dio Client (HTTP)**: Tệp gọi API cấu hình tại **[dio_client.dart](file:///D:/tuvisanco/tuvisanco-frontend/lib/core/network/dio_client.dart)**.
-*   **Socket.io Client**: Tệp kết nối realtime trong phòng chờ nhóm bạn bè viết tại **[socket_service.dart](file:///D:/tuvisanco/tuvisanco-frontend/lib/features/lobbies/data/socket_service.dart)**.
+### 2. Quy chuẩn thông điệp Commit (Conventional Commits)
+Thông điệp commit cần ngắn gọn và chỉ rõ mục đích chỉnh sửa theo chuẩn:
+*   `feat: <nội dung>` (Thêm một tính năng mới)
+*   `fix: <nội dung>` (Sửa một lỗi biên dịch/chạy thử)
+*   `docs: <nội dung>` (Cập nhật tài liệu README hoặc comment)
+*   `refactor: <nội dung>` (Tái cấu trúc mã nguồn không thay đổi logic chạy)
+
+### 3. Quy trình Merge Code
+1.  Hoàn thành tính năng ở nhánh local của mình.
+2.  Chạy thử dự án trên máy local đảm bảo không phát sinh lỗi biên dịch (`0 errors`).
+3.  Push nhánh lên GitHub và tạo **Pull Request (PR)** để Trưởng nhóm (Huy) duyệt trước khi gộp vào nhánh chính `main`.
