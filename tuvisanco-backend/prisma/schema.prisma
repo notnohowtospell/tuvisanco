@@ -1,0 +1,130 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum MatchStatus {
+  NS      // Not Started
+  LIVE    // Live
+  FT      // Finished
+  CANCL   // Cancelled
+}
+
+model User {
+  id            String            @id @default(uuid())
+  email         String            @unique
+  fullName      String
+  avatarUrl     String?
+  role          Role              @default(USER)
+  totalPoints   Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  // Relationships
+  predictions   Prediction[]
+  createdLobbies Lobby[]          @relation("LobbyCreator")
+  lobbyMemberships LobbyMember[]
+
+  @@map("users")
+}
+
+model Match {
+  id               String      @id @default(uuid())
+  apiFootballId    Int         @unique
+  leagueName       String
+  leagueLogo       String?
+  homeTeam         String
+  homeLogo         String?
+  awayTeam         String
+  awayLogo         String?
+  startTime        DateTime
+  status           MatchStatus @default(NS)
+  homeScore        Int         @default(0)
+  awayScore        Int         @default(0)
+  minuteElapsed    Int         @default(0)
+  
+  // Cache AI Gemini
+  aiWinProb        Float?      
+  aiDrawProb       Float?      
+  aiLossProb       Float?      
+  aiAnalysis       String?     
+  
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  // Relations
+  predictions      Prediction[]
+  lobbies          Lobby[]
+
+  @@map("matches")
+}
+
+model Prediction {
+  id                 String   @id @default(uuid())
+  userId             String
+  matchId            String
+  predictedHomeScore Int
+  predictedAwayScore Int
+  isJoker            Boolean  @default(false) // Double points if exact score
+  pointsEarned       Int      @default(0)
+  isCalculated       Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  // Relations
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match              Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@map("predictions")
+}
+
+model Lobby {
+  id           String        @id @default(uuid())
+  code         String        @unique 
+  name         String
+  creatorId    String
+  matchId      String
+  createdAt    DateTime      @default(now())
+
+  // Relations
+  creator      User          @relation("LobbyCreator", fields: [creatorId], references: [id])
+  match        Match         @relation(fields: [matchId], references: [id])
+  members      LobbyMember[]
+
+  @@map("lobbies")
+}
+
+model LobbyMember {
+  id           String   @id @default(uuid())
+  lobbyId      String
+  userId       String
+  pointsInRoom Int      @default(0) 
+  joinedAt     DateTime @default(now())
+
+  // Relations
+  lobby        Lobby    @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([lobbyId, userId])
+  @@map("lobby_members")
+}
+
+model News {
+  id          String   @id @default(uuid())
+  title       String
+  summary     String
+  content     String
+  imageUrl    String?
+  sourceUrl   String?
+  publishedAt DateTime @default(now())
+
+  @@map("news")
+}

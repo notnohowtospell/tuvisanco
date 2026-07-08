@@ -1,0 +1,26 @@
+# Monorepo Root GitIgnore
+
+# Backend ignores
+**/node_modules/
+**/dist/
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+**/npm-debug.log*
+
+# Frontend ignores
+**/.dart_tool/
+**/build/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/.pub/
+**/app-release.apk
+
+# OS ignores
+.DS_Store
+Thumbs.db
+*.log
