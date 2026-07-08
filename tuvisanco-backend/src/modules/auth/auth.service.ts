@@ -1,26 +1,25 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import * as admin from 'firebase-admin';
+import { initializeApp, getApps } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
   constructor(private readonly prisma: PrismaService) {
-    // Initialize Firebase Admin SDK
-    // Note: Developer must configure GOOGLE_APPLICATION_CREDENTIALS or replace with manual cert config.
-    if (admin.apps.length === 0) {
+    // Initialize Firebase Admin SDK using modern modular API
+    if (getApps().length === 0) {
       try {
-        admin.initializeApp({
-          credential: admin.credential.applicationDefault(),
-        });
+        initializeApp(); // Automatically uses Application Default Credentials
       } catch (e) {
         console.warn('Firebase Admin SDK could not initialize: missing environment configuration. Please configure Service Account.');
       }
     }
   }
 
+
   async verifyFirebaseToken(token: string) {
     try {
-      const decodedToken = await admin.auth().verifyIdToken(token);
+      const decodedToken = await getAuth().verifyIdToken(token);
       const email = decodedToken.email;
       
       if (!email) {
@@ -52,3 +51,4 @@ export class AuthService {
     }
   }
 }
+
