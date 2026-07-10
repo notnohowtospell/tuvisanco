@@ -1,36 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../features/auth/presentation/login_screen.dart';
+import '../features/auth/presentation/register_screen.dart';
+import '../features/auth/presentation/home_screen.dart';
 
 // Mocks for Router setup
-class MockLoginScreen extends StatelessWidget {
-  const MockLoginScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.sports_soccer, size: 80, color: Color(0xFF10B981)),
-              const SizedBox(height: 16),
-              const Text('Tử Vi Sân Cỏ', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              const Text('Dự đoán bóng đá đỉnh cao cùng chiến hữu', style: TextStyle(color: Colors.grey)),
-              const SizedBox(height: 48),
-              ElevatedButton(
-                onPressed: () => context.go('/matches'),
-                child: const Text('Đăng nhập bằng Google'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class MockMatchesScreen extends StatelessWidget {
   const MockMatchesScreen({super.key});
   @override
@@ -56,6 +30,11 @@ class MockMatchesScreen extends StatelessWidget {
             ElevatedButton(
               onPressed: () => context.push('/news'),
               child: const Text('Tin Tức Bóng Đá'),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () => context.push('/profile'),
+              child: const Text('Xem Hồ Sơ Cá Nhân'),
             ),
             const SizedBox(height: 24),
             TextButton(
@@ -118,11 +97,19 @@ final GoRouter appRouter = GoRouter(
   routes: <RouteBase>[
     GoRoute(
       path: '/login',
-      builder: (context, state) => const MockLoginScreen(),
+      builder: (context, state) => const LoginScreen(),
     ),
     GoRoute(
-      path: '/matches',
+      path: '/register',
+      builder: (context, state) => const RegisterScreen(),
+    ),
+    GoRoute(
+      path: '/home', // Duc's screens redirect to /home upon login success
       builder: (context, state) => const MockMatchesScreen(),
+    ),
+    GoRoute(
+      path: '/profile', // Map Duc's profile screen here
+      builder: (context, state) => const HomeScreen(),
     ),
     GoRoute(
       path: '/lobby/:code',
@@ -141,3 +128,4 @@ final GoRouter appRouter = GoRouter(
     ),
   ],
 );
+

@@ -1,11 +1,21 @@
-import { Controller, Post, Headers, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Headers, Body, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 
-@Controller('auth')
+@Controller('auth') // Đường dẫn gốc là http://localhost:3000/auth
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('verify-google')
+  @Post('register') // API: http://localhost:3000/auth/register
+  async register(@Body() body: any) {
+    return this.authService.register(body);
+  }
+
+  @Post('login') // API: http://localhost:3000/auth/login
+  async login(@Body() body: any) {
+    return this.authService.login(body);
+  }
+
+  @Post('verify-google') // API: http://localhost:3000/auth/verify-google
   async verifyGoogle(@Headers('authorization') authHeader: string) {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new UnauthorizedException('Authorization header is missing or malformed. Format: Bearer <ID_TOKEN>');
