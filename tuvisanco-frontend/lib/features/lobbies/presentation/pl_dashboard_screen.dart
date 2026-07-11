@@ -103,7 +103,7 @@ class PLDashboardScreen extends ConsumerWidget {
               itemCount: coOwners.length,
               itemBuilder: (context, index) {
                 final co = coOwners[index];
-                final double ratio = co['shareRatio'];
+                final double ratio = (co['shareRatio'] as num).toDouble();
                 final int original = co['contribution'];
                 final int currentShare = (currentPool * ratio).floor();
                 final int coPL = currentShare - original;
@@ -175,7 +175,7 @@ class PLDashboardScreen extends ConsumerWidget {
                   final bet = room['placedBets'][index];
                   final String username = bet['user'] != null ? bet['user']['fullName'] : "Ẩn danh";
                   final int points = bet['points'];
-                  final double odd = bet['odd'];
+                  final double odd = (bet['odd'] as num).toDouble();
                   final String result = bet['result']; // WON, LOST, PENDING
                   
                   Color resultColor = AppTheme.neutral;

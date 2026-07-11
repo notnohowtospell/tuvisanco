@@ -44,7 +44,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final int points = int.tryParse(_betPointsController.text) ?? 10;
-            final double odd = option['odd'];
+            final double odd = (option['odd'] as num).toDouble();
             final int potentialPayout = (points * odd).floor();
             final int profit = potentialPayout - points;
 
@@ -271,6 +271,14 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
       );
     }
 
+    final String currentUserId = ref.watch(authProvider).userId ?? '';
+    final placedBets = room['placedBets'] as List<dynamic>? ?? [];
+    
+    // Tìm các kèo thắng của user hiện tại
+    final wonBets = placedBets.where((bet) => 
+      bet['userId'] == currentUserId && bet['result'] == 'WON'
+    ).toList();
+
     final String matchDesc = room['match'] != null
         ? "${room['match']['homeTeam']} vs ${room['match']['awayTeam']}"
         : "Đang tải trận đấu...";
@@ -296,6 +304,39 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (wonBets.isNotEmpty) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  border: Border.all(color: Colors.greenAccent.withOpacity(0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.stars, color: Colors.greenAccent, size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '🎉 Chúc mừng! Bạn đã thắng cược!',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Bạn đã thắng ${(wonBets.fold<int>(0, (sum, bet) => sum + ((bet['points'] as num) * (bet['odd'] as num)).floor() - (bet['points'] as num).toInt()))} điểm từ các cược đã quyết toán trong phòng này!',
+                            style: const TextStyle(color: Colors.greenAccent, fontSize: 12, height: 1.3),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             // Thông tin trận và nhà cái
             Card(
               color: AppTheme.surface,
