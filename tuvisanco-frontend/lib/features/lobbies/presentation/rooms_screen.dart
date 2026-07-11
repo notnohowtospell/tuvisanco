@@ -218,8 +218,9 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
             ElevatedButton(
               onPressed: () async {
                 final int? contribution = int.tryParse(controller.text);
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
                 if (contribution == null || contribution < 200) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  scaffoldMessenger.showSnackBar(
                     const SnackBar(content: Text('Số vốn tối thiểu là 200 điểm.'), backgroundColor: Colors.red),
                   );
                   return;
@@ -227,7 +228,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
                 
                 final user = ref.read(authProvider);
                 if (contribution > user.points) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  scaffoldMessenger.showSnackBar(
                     const SnackBar(content: Text('Số dư điểm không đủ.'), backgroundColor: Colors.red),
                   );
                   return;
@@ -241,12 +242,12 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
                     user.userId!,
                     contribution,
                   );
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  scaffoldMessenger.showSnackBar(
                     const SnackBar(content: Text('Chấp nhận lời mời làm chủ phòng thành công!'), backgroundColor: Colors.green),
                   );
                   _refreshRooms();
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  scaffoldMessenger.showSnackBar(
                     SnackBar(content: Text('Góp vốn thất bại: $e'), backgroundColor: Colors.red),
                   );
                 }

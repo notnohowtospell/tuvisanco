@@ -111,6 +111,7 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
 
                   if (title.isEmpty) return;
 
+                  final scaffoldMessenger = ScaffoldMessenger.of(context);
                   Navigator.pop(context);
 
                   try {
@@ -124,12 +125,12 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
                       ],
                       code: widget.roomCode,
                     );
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    scaffoldMessenger.showSnackBar(
                       const SnackBar(content: Text('Xuất bản kèo cược thành công!'), backgroundColor: Colors.green),
                     );
                     _marketTitleController.clear();
                   } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    scaffoldMessenger.showSnackBar(
                       SnackBar(content: Text('Xuất bản kèo thất bại: $e'), backgroundColor: Colors.red),
                     );
                   }
@@ -167,15 +168,17 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
               onPressed: () async {
                 final inviteeId = _inviteUsernameController.text.trim();
                 if (inviteeId.isEmpty) return;
+                
+                final scaffoldMessenger = ScaffoldMessenger.of(context);
                 Navigator.pop(context);
                 try {
                   await ref.read(lobbiesProvider.notifier).inviteCoOwner(roomId, inviteeId);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  scaffoldMessenger.showSnackBar(
                     const SnackBar(content: Text('Đã gửi lời mời co-owner thành công!'), backgroundColor: Colors.green),
                   );
                   _inviteUsernameController.clear();
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  scaffoldMessenger.showSnackBar(
                     SnackBar(content: Text('Lỗi gửi lời mời: $e'), backgroundColor: Colors.red),
                   );
                 }

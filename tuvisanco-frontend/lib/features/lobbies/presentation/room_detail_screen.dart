@@ -175,8 +175,9 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                     ElevatedButton(
                       onPressed: () async {
                         final user = ref.read(authProvider);
+                        final scaffoldMessenger = ScaffoldMessenger.of(context);
                         if (points > user.points) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          scaffoldMessenger.showSnackBar(
                             const SnackBar(content: Text('Số dư điểm không đủ.'), backgroundColor: Colors.red),
                           );
                           return;
@@ -197,7 +198,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                           // Mở màn hình ăn mừng thành công (Bet Confirmed)
                           _showBetSuccessDialog(option['label'], odd, points, potentialPayout);
                         } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          scaffoldMessenger.showSnackBar(
                             SnackBar(content: Text('Đặt cược thất bại: $e'), backgroundColor: Colors.red),
                           );
                         }
