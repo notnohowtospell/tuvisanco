@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../data/lobbies_provider.dart';
+import 'package:dio/dio.dart';
 
 // Lưu trữ danh sách mã cược đã hiển thị thông báo để tránh lặp lại
 final Set<String> _notifiedBetIds = {};
@@ -198,8 +199,15 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                           // Mở màn hình ăn mừng thành công (Bet Confirmed)
                           _showBetSuccessDialog(option['label'], odd, points, potentialPayout);
                         } catch (e) {
+                          String message = e.toString();
+                          if (e is DioException) {
+                            final serverMsg = e.response?.data?['message'];
+                            if (serverMsg != null) {
+                              message = serverMsg is List ? serverMsg.join(', ') : serverMsg.toString();
+                            }
+                          }
                           scaffoldMessenger.showSnackBar(
-                            SnackBar(content: Text('Đặt cược thất bại: $e'), backgroundColor: Colors.red),
+                            SnackBar(content: Text('Đặt cược thất bại: $message'), backgroundColor: Colors.red),
                           );
                         }
                       },

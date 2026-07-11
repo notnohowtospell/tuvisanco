@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../data/lobbies_provider.dart';
+import 'package:dio/dio.dart';
 
 class RoomsScreen extends ConsumerStatefulWidget {
   const RoomsScreen({super.key});
@@ -247,8 +248,15 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
                   );
                   _refreshRooms();
                 } catch (e) {
+                  String message = e.toString();
+                  if (e is DioException) {
+                    final serverMsg = e.response?.data?['message'];
+                    if (serverMsg != null) {
+                      message = serverMsg is List ? serverMsg.join(', ') : serverMsg.toString();
+                    }
+                  }
                   scaffoldMessenger.showSnackBar(
-                    SnackBar(content: Text('Góp vốn thất bại: $e'), backgroundColor: Colors.red),
+                    SnackBar(content: Text('Góp vốn thất bại: $message'), backgroundColor: Colors.red),
                   );
                 }
               },

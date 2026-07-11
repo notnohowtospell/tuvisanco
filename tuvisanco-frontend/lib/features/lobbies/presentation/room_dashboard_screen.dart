@@ -5,6 +5,7 @@ import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/network/dio_client.dart';
 import '../data/lobbies_provider.dart';
+import 'package:dio/dio.dart';
 
 class RoomDashboardScreen extends ConsumerStatefulWidget {
   final String roomCode;
@@ -130,8 +131,15 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
                     );
                     _marketTitleController.clear();
                   } catch (e) {
+                    String message = e.toString();
+                    if (e is DioException) {
+                      final serverMsg = e.response?.data?['message'];
+                      if (serverMsg != null) {
+                        message = serverMsg is List ? serverMsg.join(', ') : serverMsg.toString();
+                      }
+                    }
                     scaffoldMessenger.showSnackBar(
-                      SnackBar(content: Text('Xuất bản kèo thất bại: $e'), backgroundColor: Colors.red),
+                      SnackBar(content: Text('Xuất bản kèo thất bại: $message'), backgroundColor: Colors.red),
                     );
                   }
                 },
@@ -178,8 +186,15 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
                   );
                   _inviteUsernameController.clear();
                 } catch (e) {
+                  String message = e.toString();
+                  if (e is DioException) {
+                    final serverMsg = e.response?.data?['message'];
+                    if (serverMsg != null) {
+                      message = serverMsg is List ? serverMsg.join(', ') : serverMsg.toString();
+                    }
+                  }
                   scaffoldMessenger.showSnackBar(
-                    SnackBar(content: Text('Lỗi gửi lời mời: $e'), backgroundColor: Colors.red),
+                    SnackBar(content: Text('Lỗi gửi lời mời: $message'), backgroundColor: Colors.red),
                   );
                 }
               },
