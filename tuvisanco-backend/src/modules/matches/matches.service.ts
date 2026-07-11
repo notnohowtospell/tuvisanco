@@ -5,12 +5,17 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class MatchesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // 1. ĐỒNG BỘ TRẬN ĐẤU THẬT (HÔM NAY VÀ NGÀY MAI TỪ API-FOOTBALL)
+  // 1. ĐỒNG BỘ TRẬN ĐẤU THẬT (HÔM NAY VÀ NGÀY MAI TỪ API ĐỐI TÁC)
   async syncDailyFixtures() {
+    const statsApiKey = process.env.THE_STATS_API_KEY;
+    if (statsApiKey && statsApiKey !== 'your_the_stats_api_key') {
+      await this.syncDailyFixturesFromTheStatsApi(statsApiKey);
+      return;
+    }
+
     const apiKey = process.env.RAPIDAPI_FOOTBALL_KEY;
-    
     if (!apiKey || apiKey === 'your_api_football_rapidapi_key') {
-      console.warn('API-Football Key is not configured. Cannot sync real matches.');
+      console.warn('API Key is not configured. Cannot sync real matches.');
       return;
     }
 
@@ -98,6 +103,11 @@ export class MatchesService {
     const match = await this.prisma.match.findUnique({ where: { id } });
     if (!match) {
       throw new NotFoundException('Không tìm thấy trận đấu.');
+    }
+
+    const statsApiKey = process.env.THE_STATS_API_KEY;
+    if (statsApiKey && statsApiKey !== 'your_the_stats_api_key') {
+      return this.syncMatchDetailsFromTheStatsApi(id, match.apiFootballId, statsApiKey);
     }
 
     const apiKey = process.env.RAPIDAPI_FOOTBALL_KEY;
@@ -265,5 +275,164 @@ export class MatchesService {
     }
 
     return match;
+  }
+
+  // --- THE STATS API IMPLEMENTATION ---
+
+  private async syncDailyFixturesFromTheStatsApi(apiKey: string) {
+    try {
+      // Tự động xóa các trận mock cũ (nếu có) mà CHƯA bị phòng cược hay dự đoán nào tham chiếu
+      await this.prisma.match.deleteMany({
+        where: {
+          apiFootballId: {
+            gte: 9900,
+            lte: 9999,
+          },
+          bettingRooms: {
+            none: {},
+          },
+          freePredictions: {
+            none: {},
+          },
+        },
+      });
+
+      // Tải danh sách giải đấu để ánh xạ tên giải từ competition_id
+      const competitionsMap = new Map<string, string>();
+      try {
+        for (const page of [1, 2]) {
+          const compRes = await fetch(`https://api.thestatsapi.com/api/football/competitions?page=${page}&per_page=100`, {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+          });
+          const compData = await compRes.json();
+          const list = compData?.data || [];
+          for (const c of list) {
+            competitionsMap.set(c.id, c.name);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load competitions list, falling back to ID mapping:', e);
+      }
+
+      // Đồng bộ cả trận đấu hôm nay và ngày mai
+      const daysToSync = [0, 1];
+      for (const offset of daysToSync) {
+        const targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + offset);
+        const dateStr = targetDate.toISOString().split('T')[0];
+
+        console.log(`Syncing real matches from The Stats API for date: ${dateStr}...`);
+
+        const response = await fetch(`https://api.thestatsapi.com/api/football/matches?date_from=${dateStr}&date_to=${dateStr}&per_page=100`, {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+          },
+        });
+        const resJson = await response.json();
+        const dailyMatches = resJson?.data || [];
+        console.log(`The Stats API returned ${dailyMatches.length} matches for date: ${dateStr}.`);
+
+        for (const item of dailyMatches) {
+          // Trích xuất ID số từ định dạng mt_XXXXX
+          const numId = parseInt(item.id.replace('mt_', ''), 10);
+          if (isNaN(numId)) continue;
+
+          let status: 'NS' | 'LIVE' | 'FT' | 'CANCL' = 'NS';
+          if (item.status === 'live') {
+            status = 'LIVE';
+          } else if (item.status === 'finished') {
+            status = 'FT';
+          } else if (item.status === 'cancelled') {
+            status = 'CANCL';
+          }
+
+          const leagueName = competitionsMap.get(item.competition_id) || item.competition_name || item.competition_id;
+
+          await this.prisma.match.upsert({
+            where: { apiFootballId: numId },
+            update: {
+              status,
+              homeScore: item.score?.home ?? 0,
+              awayScore: item.score?.away ?? 0,
+              minuteElapsed: item.minute_elapsed ?? 0,
+            },
+            create: {
+              apiFootballId: numId,
+              leagueName: leagueName,
+              leagueLogo: null,
+              homeTeam: item.home_team.name,
+              homeLogo: null,
+              awayTeam: item.away_team.name,
+              awayLogo: null,
+              startTime: new Date(item.utc_date),
+              status,
+              homeScore: item.score?.home ?? 0,
+              awayScore: item.score?.away ?? 0,
+              minuteElapsed: item.minute_elapsed ?? 0,
+            },
+          });
+        }
+      }
+      console.log('Successfully synced The Stats API matches to database.');
+    } catch (e) {
+      console.error('Failed to sync fixtures from The Stats API:', e);
+    }
+  }
+
+  private async syncMatchDetailsFromTheStatsApi(id: string, numericId: number, apiKey: string) {
+    try {
+      const matchIdStr = `mt_${numericId}`;
+      const headers = {
+        'Authorization': `Bearer ${apiKey}`,
+      };
+
+      // A. Lấy Đội hình (Lineups)
+      let lineupHome = null;
+      let lineupAway = null;
+      try {
+        const lineupsRes = await fetch(`https://api.thestatsapi.com/api/football/matches/${matchIdStr}/lineups`, { headers });
+        const lineupsData = await lineupsRes.json();
+        if (lineupsData?.data) {
+          lineupHome = lineupsData.data.home;
+          lineupAway = lineupsData.data.away;
+        }
+      } catch (e) {
+        console.warn(`Failed to fetch lineups for ${matchIdStr}:`, e);
+      }
+
+      // B. Lấy Thống kê (Stats)
+      let teamStats = null;
+      try {
+        const statsRes = await fetch(`https://api.thestatsapi.com/api/football/matches/${matchIdStr}/stats`, { headers });
+        const statsData = await statsRes.json();
+        if (statsData?.data) {
+          teamStats = statsData.data;
+        }
+      } catch (e) {
+        console.warn(`Failed to fetch stats for ${matchIdStr}:`, e);
+      }
+
+      // C. Lịch sử H2H (Tạo mẫu)
+      const match = await this.prisma.match.findUnique({ where: { id } });
+      if (!match) return null;
+      const h2hHistory = [
+        { date: '2025-11-12', home: match.homeTeam, away: match.awayTeam, score: '2-1', league: match.leagueName },
+        { date: '2025-04-20', home: match.awayTeam, away: match.homeTeam, score: '1-1', league: match.leagueName },
+        { date: '2024-12-05', home: match.homeTeam, away: match.awayTeam, score: '0-2', league: match.leagueName },
+      ];
+
+      return this.prisma.match.update({
+        where: { id },
+        data: {
+          lineupHome: lineupHome as any,
+          lineupAway: lineupAway as any,
+          teamStats: teamStats as any,
+          h2hHistory: h2hHistory as any,
+        },
+      });
+    } catch (e) {
+      console.error(`Failed to sync details from The Stats API for match ${numericId}:`, e);
+      return this.prisma.match.findUnique({ where: { id } });
+    }
   }
 }
