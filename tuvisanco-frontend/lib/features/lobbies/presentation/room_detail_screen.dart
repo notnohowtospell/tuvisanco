@@ -62,6 +62,13 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
             final int remainingExposure = market['exposureLimit'] - market['currentExposure'];
             final double exposureRatio = (market['currentExposure'] + potentialPayout) / market['exposureLimit'];
 
+            // Tính toán giới hạn cược tối đa động
+            final int membersCount = (room['members'] as List?)?.length ?? 0;
+            final int totalMembers = (membersCount + 1) > 2 ? (membersCount + 1) : 2;
+            final int exposureLimit = (market['exposureLimit'] as num).toInt();
+            final int maxBetLimit = (exposureLimit ~/ totalMembers) > 20 ? (exposureLimit ~/ totalMembers) : 20;
+            final bool isBetInvalid = points < 10 || points > maxBetLimit;
+
             return BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10), // Glassmorphism
               child: Container(
@@ -116,8 +123,19 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                     ),
                     const SizedBox(height: 20),
 
+
+
                     // Ô nhập cược
-                    const Text('SỐ ĐIỂM CƯỢC', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('SỐ ĐIỂM CƯỢC', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                        Text(
+                          'Giới hạn: 10 - $maxBetLimit pts',
+                          style: const TextStyle(color: AppTheme.warning, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _betPointsController,
@@ -134,6 +152,16 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                         setModalState(() {});
                       },
                     ),
+                    if (isBetInvalid)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6.0),
+                        child: Text(
+                          points < 10 
+                              ? 'Mức cược tối thiểu là 10 pts' 
+                              : 'Vượt quá hạn mức tối đa cho phép là $maxBetLimit pts',
+                          style: const TextStyle(color: AppTheme.error, fontSize: 12),
+                        ),
+                      ),
                     const SizedBox(height: 16),
 
                     // Tính toán thưởng tiềm năng
@@ -174,7 +202,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                     const SizedBox(height: 24),
 
                     ElevatedButton(
-                      onPressed: () async {
+                      onPressed: isBetInvalid ? null : () async {
                         final user = ref.read(authProvider);
                         final scaffoldMessenger = ScaffoldMessenger.of(context);
                         if (points > user.points) {

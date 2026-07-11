@@ -4,6 +4,7 @@ import 'theme.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
 import '../features/auth/presentation/home_screen.dart';
+import '../features/auth/presentation/profile_screen.dart';
 
 // Import các màn hình Lobbies của Huy (Sẽ tạo ở bước tiếp theo)
 import '../features/lobbies/presentation/rooms_screen.dart';
@@ -172,7 +173,7 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: '/profile',
-          builder: (context, state) => const HomeScreen(),
+          builder: (context, state) => const ProfileScreen(),
         ),
       ],
     ),
