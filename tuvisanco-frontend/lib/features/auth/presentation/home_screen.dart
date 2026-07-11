@@ -1,17 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// Sửa lại đường dẫn lùi 3 cấp thư mục để tìm đúng file auth_provider
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/daily_check_in_provider.dart';
+import '../../../core/widgets/daily_check_in_dialog.dart';
+import '../../lobbies/presentation/pl_dashboard_screen.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Gọi fetchStatus ngay khi màn hình khởi tạo để kiểm tra trạng thái điểm danh
+    Future.microtask(() {
+      final auth = ref.read(authProvider);
+      if (auth.userId != null) {
+        ref.read(dailyCheckInProvider.notifier).fetchStatus(auth.userId!);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
 
+    // Lắng nghe trạng thái điểm danh để tự động hiển thị popup 1 lần duy nhất trong session
+    ref.listen<CheckInState>(dailyCheckInProvider, (previous, next) {
+      if (next.canCheckInToday && !next.hasPromptedCheckIn && !next.isLoading) {
+        // Đánh dấu đã hiển thị để tránh mở lặp lại
+        ref.read(dailyCheckInProvider.notifier).setHasPrompted(true);
+        DailyCheckInDialog.show(context, auth.userId!);
+      }
+    });
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Trang Chủ (Home)')),
+      appBar: AppBar(
+        title: const Text('Trang Chủ (Home)'),
+        actions: [
+          // Nút bấm mở nhanh Popup điểm danh (để người dùng chủ động xem lại tiến trình quà tặng)
+          if (auth.userId != null)
+            IconButton(
+              icon: const Icon(Icons.card_giftcard_rounded, color: Colors.amber),
+              onPressed: () {
+                DailyCheckInDialog.show(context, auth.userId!);
+              },
+            ),
+        ],
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

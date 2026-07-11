@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
-import '../../../core/network/dio_client.dart';
 import '../data/lobbies_provider.dart';
 import 'package:dio/dio.dart';
 

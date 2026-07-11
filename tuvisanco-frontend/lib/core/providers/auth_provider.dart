@@ -144,6 +144,10 @@ class AuthNotifier extends Notifier<AuthState> {
   void logout() {
     state = AuthState();
   }
+
+  void updatePoints(int newPoints) {
+    state = state.copyWith(points: newPoints);
+  }
 }
 
 // 3. Provider toàn cục giữ nguyên
