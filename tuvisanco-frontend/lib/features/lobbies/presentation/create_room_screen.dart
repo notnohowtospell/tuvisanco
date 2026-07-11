@@ -5,6 +5,7 @@ import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/network/dio_client.dart';
 import '../data/lobbies_provider.dart';
+import 'package:dio/dio.dart';
 
 class CreateRoomScreen extends ConsumerStatefulWidget {
   const CreateRoomScreen({super.key});
@@ -105,8 +106,15 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
 
       context.pushReplacement('/rooms/dashboard/${room['code']}');
     } catch (e) {
+      String message = e.toString();
+      if (e is DioException) {
+        final serverMsg = e.response?.data?['message'];
+        if (serverMsg != null) {
+          message = serverMsg is List ? serverMsg.join(', ') : serverMsg.toString();
+        }
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Tạo phòng thất bại: ${e.toString()}'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Tạo phòng thất bại: $message'), backgroundColor: Colors.red),
       );
     }
   }
