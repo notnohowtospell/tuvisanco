@@ -115,8 +115,8 @@ export class LobbiesService {
     });
   }
 
-  // 3. MỜI ĐỒNG CHỦ PHÒNG (Ghi nhận với contribution = 0 để làm Pending Invite)
-  async inviteCoOwner(roomId: string, inviteeId: string) {
+  // 3. MỜI ĐỒNG CHỦ PHÒNG (Cho phép tìm bằng ID hoặc Email)
+  async inviteCoOwner(roomId: string, inviteeIdentifier: string) {
     const room = await this.prisma.bettingRoom.findUnique({
       where: { id: roomId },
       include: { coOwners: true },
@@ -130,18 +130,36 @@ export class LobbiesService {
       throw new BadRequestException('Phòng đã đạt giới hạn tối đa 5 Co-owner.');
     }
 
+    // Tìm người dùng bằng ID hoặc Email
+    const invitee = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: inviteeIdentifier },
+          { email: inviteeIdentifier },
+        ],
+      },
+    });
+
+    if (!invitee) {
+      throw new NotFoundException('Không tìm thấy người dùng cần mời. Vui lòng kiểm tra lại Email hoặc ID.');
+    }
+
+    if (invitee.id === room.ownerId) {
+      throw new BadRequestException('Người được mời là chủ phòng hiện tại.');
+    }
+
     const existing = await this.prisma.roomCoOwner.findUnique({
-      where: { roomId_userId: { roomId, userId: inviteeId } },
+      where: { roomId_userId: { roomId, userId: invitee.id } },
     });
 
     if (existing) {
-      throw new BadRequestException('Người dùng đã là chủ phòng hoặc đã có lời mời.');
+      throw new BadRequestException('Người dùng đã là đồng chủ phòng hoặc đã có lời mời.');
     }
 
     return this.prisma.roomCoOwner.create({
       data: {
         roomId,
-        userId: inviteeId,
+        userId: invitee.id,
         contribution: 0, // 0 biểu thị trạng thái chờ chấp nhận (Pending)
         shareRatio: 0.0,
       },

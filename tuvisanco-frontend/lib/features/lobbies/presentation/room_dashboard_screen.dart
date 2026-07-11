@@ -154,7 +154,7 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
             controller: _inviteUsernameController,
             style: const TextStyle(color: Colors.white),
             decoration: const InputDecoration(
-              hintText: "Nhập ID hoặc Username cần mời",
+              hintText: "Nhập Email hoặc ID cần mời",
               hintStyle: TextStyle(color: AppTheme.textDisabled),
             ),
           ),
