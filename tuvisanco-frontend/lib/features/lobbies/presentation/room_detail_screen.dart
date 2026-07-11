@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,9 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../data/lobbies_provider.dart';
+
+// Lưu trữ danh sách mã cược đã hiển thị thông báo để tránh lặp lại
+final Set<String> _notifiedBetIds = {};
 
 class RoomDetailScreen extends ConsumerStatefulWidget {
   final String roomCode;
@@ -16,6 +20,10 @@ class RoomDetailScreen extends ConsumerStatefulWidget {
 
 class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
   final _betPointsController = TextEditingController(text: '10');
+  
+  bool _showWonBanner = false;
+  int _wonPointsSum = 0;
+  Timer? _bannerTimer;
 
   @override
   void initState() {
@@ -32,6 +40,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
   @override
   void dispose() {
     _betPointsController.dispose();
+    _bannerTimer?.cancel();
     super.dispose();
   }
 
@@ -261,6 +270,46 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Lắng nghe thay đổi trạng thái phòng cược để hiển thị Banner chúc mừng thắng cuộc 1 lần duy nhất
+    ref.listen(lobbiesProvider, (previous, next) {
+      final roomDetails = next.currentRoomDetails;
+      if (roomDetails != null) {
+        final String currentUserId = ref.read(authProvider).userId ?? '';
+        final placedBets = roomDetails['placedBets'] as List<dynamic>? ?? [];
+        
+        // Tìm các đơn cược đã THẮNG (WON) mà CHƯA từng được hiển thị thông báo chúc mừng
+        final newWonBets = placedBets.where((bet) => 
+          bet['userId'] == currentUserId && 
+          bet['result'] == 'WON' &&
+          !_notifiedBetIds.contains(bet['id'].toString())
+        ).toList();
+
+        if (newWonBets.isNotEmpty) {
+          final int pointsWon = newWonBets.fold<int>(0, (sum, bet) => 
+            sum + ((bet['points'] as num) * (bet['odd'] as num)).floor() - (bet['points'] as num).toInt()
+          );
+
+          // Đánh dấu đã hiển thị
+          _notifiedBetIds.addAll(newWonBets.map((b) => b['id'].toString()));
+
+          setState(() {
+            _showWonBanner = true;
+            _wonPointsSum = pointsWon;
+          });
+
+          // Tự động đóng banner sau 6 giây
+          _bannerTimer?.cancel();
+          _bannerTimer = Timer(const Duration(seconds: 6), () {
+            if (mounted) {
+              setState(() {
+                _showWonBanner = false;
+              });
+            }
+          });
+        }
+      }
+    });
+
     final state = ref.watch(lobbiesProvider);
     final room = state.currentRoomDetails;
 
@@ -270,14 +319,6 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
         body: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
       );
     }
-
-    final String currentUserId = ref.watch(authProvider).userId ?? '';
-    final placedBets = room['placedBets'] as List<dynamic>? ?? [];
-    
-    // Tìm các kèo thắng của user hiện tại
-    final wonBets = placedBets.where((bet) => 
-      bet['userId'] == currentUserId && bet['result'] == 'WON'
-    ).toList();
 
     final String matchDesc = room['match'] != null
         ? "${room['match']['homeTeam']} vs ${room['match']['awayTeam']}"
@@ -304,7 +345,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (wonBets.isNotEmpty) ...[
+            if (_showWonBanner) ...[
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(12),
@@ -327,11 +368,19 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Bạn đã thắng ${(wonBets.fold<int>(0, (sum, bet) => sum + ((bet['points'] as num) * (bet['odd'] as num)).floor() - (bet['points'] as num).toInt()))} điểm từ các cược đã quyết toán trong phòng này!',
+                            'Bạn đã thắng $_wonPointsSum điểm từ các cược đã quyết toán trong phòng này!',
                             style: const TextStyle(color: Colors.greenAccent, fontSize: 12, height: 1.3),
                           ),
                         ],
                       ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.greenAccent, size: 18),
+                      onPressed: () {
+                        setState(() {
+                          _showWonBanner = false;
+                        });
+                      },
                     ),
                   ],
                 ),
