@@ -29,6 +29,13 @@ export class MatchesService {
 
       console.log(`API-Football returned ${fixtures.length} matches for today.`);
 
+      // ĐÃ SỬA: Nếu API trả về 0 trận (hết hạn, hết lượt, hoặc ngày không có trận), tự động nạp trận mẫu dự phòng
+      if (fixtures.length === 0) {
+        console.warn('API-Football returned 0 matches. Falling back to mock matches...');
+        await this.generateMockMatches();
+        return;
+      }
+
       for (const item of fixtures) {
         let status: 'NS' | 'LIVE' | 'FT' | 'CANCL' = 'NS';
         const shortStatus = item.fixture.status.short;

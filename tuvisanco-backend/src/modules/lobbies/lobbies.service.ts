@@ -5,6 +5,20 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class LobbiesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async ensureUserExists(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user && userId === 'mock-google-user-uuid-1234') {
+      await this.prisma.user.create({
+        data: {
+          id: 'mock-google-user-uuid-1234',
+          email: 'google.login@gmail.com',
+          fullName: 'Google Member',
+          totalPoints: 1000,
+        },
+      });
+    }
+  }
+
   // 1. LẤY DANH SÁCH PHÒNG CỦA USER
   async getUserLobbies(userId: string) {
     return this.prisma.bettingRoom.findMany({
@@ -46,6 +60,8 @@ export class LobbiesService {
     if (data.contribution < 200) {
       throw new BadRequestException('Mức góp vốn tối thiểu để tạo phòng là 200 điểm.');
     }
+
+    await this.ensureUserExists(data.creatorId);
 
     const user = await this.prisma.user.findUnique({
       where: { id: data.creatorId },
@@ -271,6 +287,7 @@ export class LobbiesService {
 
   // 6. GIA NHẬP PHÒNG BẰNG MÃ PIN (MEMBER)
   async joinLobby(userId: string, code: string) {
+    await this.ensureUserExists(userId);
     const room = await this.prisma.bettingRoom.findUnique({
       where: { code },
       include: { members: true },
@@ -306,6 +323,7 @@ export class LobbiesService {
       throw new BadRequestException('Mức đặt cược tối thiểu là 10 điểm.');
     }
 
+    await this.ensureUserExists(userId);
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.totalPoints < points) {
       throw new BadRequestException('Số dư tài khoản không đủ để đặt cược.');
