@@ -119,7 +119,10 @@ class _DailyCheckInDialogState extends ConsumerState<DailyCheckInDialog> with Ti
               elevation: 0,
               child: Container(
                 width: double.infinity,
-                maxHeight: 520,
+                constraints: const BoxConstraints(
+                  maxHeight: 520,
+                  maxWidth: 400,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -225,8 +228,8 @@ class _DailyCheckInDialogState extends ConsumerState<DailyCheckInDialog> with Ti
                                 foregroundColor: Colors.black,
                                 backgroundColor: checkInState.canCheckInToday
                                     ? Colors.amber.shade400
-                                    : AppTheme.surfaceCard,
-                                disabledBackgroundColor: AppTheme.surfaceCard,
+                                    : AppTheme.surfaceElevated,
+                                disabledBackgroundColor: AppTheme.surfaceElevated,
                                 padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 16),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(30),
@@ -296,7 +299,7 @@ class _DailyCheckInDialogState extends ConsumerState<DailyCheckInDialog> with Ti
             ? AppTheme.primary.withOpacity(0.1)
             : isClaimed
                 ? Colors.green.withOpacity(0.08)
-                : AppTheme.surfaceCard,
+                : AppTheme.surfaceElevated,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isToday

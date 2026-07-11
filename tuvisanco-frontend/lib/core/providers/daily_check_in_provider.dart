@@ -58,15 +58,17 @@ class CheckInState {
   }
 }
 
-class DailyCheckInNotifier extends StateNotifier<CheckInState> {
-  final Ref _ref;
+class DailyCheckInNotifier extends Notifier<CheckInState> {
   final Dio _dio = Dio(BaseOptions(
     baseUrl: "http://10.0.2.2:3000/users",
     connectTimeout: const Duration(seconds: 5),
     receiveTimeout: const Duration(seconds: 5),
   ));
 
-  DailyCheckInNotifier(this._ref) : super(CheckInState());
+  @override
+  CheckInState build() {
+    return CheckInState();
+  }
 
   void setHasPrompted(bool value) {
     state = state.copyWith(hasPromptedCheckIn: value);
@@ -107,7 +109,7 @@ class DailyCheckInNotifier extends StateNotifier<CheckInState> {
         final int totalPoints = data['totalPoints'];
 
         // Cập nhật lại số điểm của người dùng trong AuthProvider
-        _ref.read(authProvider.notifier).updatePoints(totalPoints);
+        ref.read(authProvider.notifier).updatePoints(totalPoints);
 
         // Đánh dấu đã hiện popup để không hiện lại
         setHasPrompted(true);
@@ -136,6 +138,6 @@ class DailyCheckInNotifier extends StateNotifier<CheckInState> {
   }
 }
 
-final dailyCheckInProvider = StateNotifierProvider<DailyCheckInNotifier, CheckInState>((ref) {
-  return DailyCheckInNotifier(ref);
+final dailyCheckInProvider = NotifierProvider<DailyCheckInNotifier, CheckInState>(() {
+  return DailyCheckInNotifier();
 });
