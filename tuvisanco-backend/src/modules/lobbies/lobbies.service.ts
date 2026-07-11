@@ -231,6 +231,10 @@ export class LobbiesService {
 
   // 5. TẠO KÈO CƯỢC TỪ TEMPLATE (ODDS CONFIGURATOR)
   async publishMarket(roomId: string, title: string, category: any, options: any[]) {
+    let finalCategory = category;
+    if (category === 'FUN_BET') {
+      finalCategory = 'FUN';
+    }
     const room = await this.prisma.bettingRoom.findUnique({
       where: { id: roomId },
       include: { markets: true },
@@ -266,7 +270,7 @@ export class LobbiesService {
       data: {
         roomId,
         title,
-        category,
+        category: finalCategory,
         options: formattedOptions as any,
         exposureLimit,
         currentExposure: 0,

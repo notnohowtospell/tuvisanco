@@ -117,7 +117,7 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
                     await ref.read(lobbiesProvider.notifier).publishMarket(
                       roomId: roomId,
                       title: title,
-                      category: 'FUN_BET',
+                      category: 'FUN',
                       options: [
                         {'id': 'yes', 'label': 'Có', 'odd': odd1},
                         {'id': 'no', 'label': 'Không', 'odd': odd2},
