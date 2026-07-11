@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 
 // 1. Model giữ nguyên cấu trúc của bạn
 class AuthState {
+  final String? userId;
   final String? token;
   final String? email;
   final String? username;
@@ -11,6 +12,7 @@ class AuthState {
   final bool isLoading;
 
   AuthState({
+    this.userId,
     this.token,
     this.email,
     this.username,
@@ -20,6 +22,7 @@ class AuthState {
   });
 
   AuthState copyWith({
+    String? userId,
     String? token,
     String? email,
     String? username,
@@ -28,6 +31,7 @@ class AuthState {
     bool? isLoading,
   }) {
     return AuthState(
+      userId: userId ?? this.userId,
       token: token ?? this.token,
       email: email ?? this.email,
       username: username ?? this.username,
@@ -41,12 +45,13 @@ class AuthState {
 // 2. Notifier quản lý kết nối API thật
 class AuthNotifier extends Notifier<AuthState> {
   // Định nghĩa Dio và Base URL kết nối Backend
-  // ⚠️ LƯU Ý: Dùng 'http://10.0.2.2:3000' cho máy ảo Android. Nếu test máy thật dùng IP mạng LAN.
-  // 🔴 Bật dòng này khi bạn quay lại test bằng MÁY ẢO Android Studio:
-// final Dio _dio = Dio(BaseOptions(baseUrl: "http://10.0.2.2:3000/auth"));
+  // ĐÃ SỬA: Sử dụng 10.0.2.2 để kết nối chính xác từ máy ảo Android Studio tới localhost máy chủ
+  final Dio _dio = Dio(BaseOptions(
+    baseUrl: "http://10.0.2.2:3000/auth",
+    connectTimeout: const Duration(seconds: 5),
+    receiveTimeout: const Duration(seconds: 5),
+  ));
 
-// 🟢 Bật dòng này khi bạn test bằng ĐIỆN THOẠI THẬT qua mạng Wi-Fi:
-  final Dio _dio = Dio(BaseOptions(baseUrl: "http://192.168.1.101:3000/auth"));
 
   @override
   AuthState build() {
@@ -78,6 +83,7 @@ class AuthNotifier extends Notifier<AuthState> {
       final userData = response.data['user'];
 
       state = AuthState(
+        userId: userData['id'],
         token: null, // Thường đăng ký xong bắt login lại, hoặc nếu NestJS tự login thì truyền token vào đây
         email: userData['email'],
         username: userData['fullName'],
@@ -107,6 +113,7 @@ class AuthNotifier extends Notifier<AuthState> {
 
       // Lưu trạng thái đăng nhập thành công với dữ liệu THẬT từ Database
       state = AuthState(
+        userId: userData['id'],
         token: token,
         email: userData['email'],
         username: userData['name'], // Backend trả về trường 'name' chứa 'fullName'
@@ -125,6 +132,7 @@ class AuthNotifier extends Notifier<AuthState> {
     state = state.copyWith(isLoading: true, error: null);
     await Future.delayed(const Duration(milliseconds: 1500));
     state = AuthState(
+      userId: "mock-google-user-uuid-1234",
       token: "mock_google_login_jwt_token_888",
       email: "google.login@gmail.com",
       username: "Google Member",
