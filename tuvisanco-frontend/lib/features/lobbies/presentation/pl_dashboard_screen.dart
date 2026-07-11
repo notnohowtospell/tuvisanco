@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../data/lobbies_provider.dart';
 
 class PLDashboardScreen extends ConsumerWidget {
@@ -20,21 +21,39 @@ class PLDashboardScreen extends ConsumerWidget {
       );
     }
 
-    // Tính toán lãi lỗ tổng của cả phòng cược
-    // (VD: tổng điểm ban đầu của nhà cái so với tổng điểm hiện tại sau cược)
-    final coOwners = room['coOwners'] as List<dynamic>;
+    final String currentUserId = ref.watch(authProvider).userId ?? '';
+    final coOwners = room['coOwners'] as List<dynamic>? ?? [];
+    
+    // Kiểm tra xem user hiện tại là Nhà cái chính (Owner) hoặc đồng chủ phòng (Co-owner) hay không
+    final bool isHouse = room['ownerId'] == currentUserId || 
+        coOwners.any((co) => co['userId'] == currentUserId && (co['contribution'] as num) > 0);
+
+    // Tính toán lãi lỗ tổng của cả phòng cược (Dành cho nhà cái)
     int originalPool = 0;
     for (var co in coOwners) {
       originalPool += (co['contribution'] as num).toInt();
     }
-    
     final int currentPool = (room['totalPool'] as num).toInt();
     final int netPL = currentPool - originalPool;
+
+    // Tính toán cược cá nhân (Dành cho người chơi thường)
+    final placedBets = room['placedBets'] as List<dynamic>? ?? [];
+    final userBets = placedBets.where((bet) => bet['userId'] == currentUserId).toList();
+    
+    int personalWagered = 0;
+    int personalWon = 0;
+    for (var bet in userBets) {
+      personalWagered += (bet['points'] as num).toInt();
+      if (bet['result'] == 'WON') {
+        personalWon += ((bet['points'] as num) * (bet['odd'] as num)).floor();
+      }
+    }
+    final int personalPL = personalWon - personalWagered;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('Báo cáo Lãi/Lỗ P&L'),
+        title: Text(isHouse ? 'Báo cáo Lãi/Lỗ Nhà Cái' : 'Báo cáo Lãi/Lỗ Cá Nhân'),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -46,7 +65,7 @@ class PLDashboardScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Bảng tổng hợp lãi lỗ quỹ nhà cái (House Pool)
+            // 1. BẢNG LEDGER TỔNG KẾT
             Card(
               color: AppTheme.surface,
               shape: RoundedRectangleBorder(
@@ -58,13 +77,18 @@ class PLDashboardScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'TỔNG KẾT QUỸ NHÀ CÁI (HOUSE)',
-                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.bold),
+                    Text(
+                      isHouse ? 'TỔNG KẾT QUỸ NHÀ CÁI (HOUSE)' : 'TỔNG KẾT CƯỢC CÁ NHÂN',
+                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 16),
-                    _buildLedgerRow('Vốn đóng góp ban đầu:', '$originalPool pts'),
-                    _buildLedgerRow('Quỹ nhà cái hiện tại:', '$currentPool pts'),
+                    if (isHouse) ...[
+                      _buildLedgerRow('Vốn đóng góp ban đầu:', '$originalPool pts'),
+                      _buildLedgerRow('Quỹ nhà cái hiện tại:', '$currentPool pts'),
+                    ] else ...[
+                      _buildLedgerRow('Tổng số điểm đã cược:', '$personalWagered pts'),
+                      _buildLedgerRow('Tổng số điểm thắng nhận về:', '$personalWon pts'),
+                    ],
                     const SizedBox(height: 8),
                     const Divider(color: AppTheme.surfaceBorder, height: 1),
                     const SizedBox(height: 12),
@@ -76,9 +100,11 @@ class PLDashboardScreen extends ConsumerWidget {
                           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
                         ),
                         Text(
-                          netPL >= 0 ? '+${netPL} pts' : '${netPL} pts',
+                          isHouse 
+                              ? (netPL >= 0 ? '+${netPL} pts' : '${netPL} pts')
+                              : (personalPL >= 0 ? '+${personalPL} pts' : '${personalPL} pts'),
                           style: TextStyle(
-                            color: netPL >= 0 ? AppTheme.success : AppTheme.error,
+                            color: (isHouse ? netPL : personalPL) >= 0 ? AppTheme.success : AppTheme.error,
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
                           ),
@@ -91,88 +117,98 @@ class PLDashboardScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 24),
 
-            // Tỷ lệ phân chia đồng chủ phòng (Co-owners Payouts)
-            const Text(
-              'PHÂN CHIA VỐN & LỢI NHUẬN NHÀ CÁI',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: coOwners.length,
-              itemBuilder: (context, index) {
-                final co = coOwners[index];
-                final double ratio = (co['shareRatio'] as num).toDouble();
-                final int original = co['contribution'];
-                final int currentShare = (currentPool * ratio).floor();
-                final int coPL = currentShare - original;
+            // 2. TỶ LỆ PHÂN CHIA VỐN NHÀ CÁI (Chỉ hiển thị cho Nhà cái/Co-owner)
+            if (isHouse) ...[
+              const Text(
+                'PHÂN CHIA VỐN & LỢI NHUẬN NHÀ CÁI',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: coOwners.length,
+                itemBuilder: (context, index) {
+                  final co = coOwners[index];
+                  final double ratio = (co['shareRatio'] as num).toDouble();
+                  final int original = co['contribution'];
+                  final int currentShare = (currentPool * ratio).floor();
+                  final int coPL = currentShare - original;
 
-                return Card(
-                  color: AppTheme.surfaceElevated,
-                  margin: const EdgeInsets.only(bottom: 8.0),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              co['user']['fullName'],
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Cổ phần: ${(ratio * 100).toStringAsFixed(1)}% (Góp: $original pts)',
-                              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              '$currentShare pts',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              coPL >= 0 ? '+$coPL pts' : '$coPL pts',
-                              style: TextStyle(color: coPL >= 0 ? AppTheme.success : AppTheme.error, fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ],
+                  return Card(
+                    color: AppTheme.surfaceElevated,
+                    margin: const EdgeInsets.only(bottom: 8.0),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                co['user']['fullName'],
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Cổ phần: ${(ratio * 100).toStringAsFixed(1)}% (Góp: $original pts)',
+                                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '$currentShare pts',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                coPL >= 0 ? '+$coPL pts' : '$coPL pts',
+                                style: TextStyle(color: coPL >= 0 ? AppTheme.success : AppTheme.error, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 24),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+            ],
 
-            // Danh sách người chơi đặt cược (Members Bets Summary)
-            const Text(
-              'TÌNH HÌNH ĐẶT CƯỢC CỦA THÀNH VIÊN',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.bold),
+            // 3. DANH SÁCH ĐƠN CƯỢC
+            Text(
+              isHouse ? 'TÌNH HÌNH ĐẶT CƯỢC CỦA THÀNH VIÊN' : 'LỊCH SỬ ĐẶT CƯỢC CỦA BẠN',
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
-            if (room['placedBets'] == null || room['placedBets'].isEmpty)
+            // Lấy danh sách cược tùy theo phân quyền (Nhà cái xem hết, Con bạc chỉ xem của mình)
+            if (isHouse && placedBets.isEmpty)
               const Center(
                 child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 24.0),
                   child: Text('Chưa có thành viên nào đặt cược.', style: TextStyle(color: AppTheme.textDisabled)),
                 ),
               )
+            else if (!isHouse && userBets.isEmpty)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24.0),
+                  child: Text('Bạn chưa đặt cược nào trong phòng này.', style: TextStyle(color: AppTheme.textDisabled)),
+                ),
+              )
             else
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: room['placedBets'].length,
+                itemCount: isHouse ? placedBets.length : userBets.length,
                 itemBuilder: (context, index) {
-                  final bet = room['placedBets'][index];
+                  final bet = isHouse ? placedBets[index] : userBets[index];
                   final String username = bet['user'] != null ? bet['user']['fullName'] : "Ẩn danh";
                   final int points = bet['points'];
                   final double odd = (bet['odd'] as num).toDouble();
@@ -199,7 +235,11 @@ class PLDashboardScreen extends ConsumerWidget {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(username, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                              if (isHouse)
+                                Text(username, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))
+                              else
+                                Text(bet['market'] != null ? bet['market']['title'] : 'Kèo cược', 
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
                               const SizedBox(height: 4),
                               Text(
                                 'Cược: $points pts (Tỷ lệ: x$odd)',
