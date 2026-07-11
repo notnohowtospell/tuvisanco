@@ -5,12 +5,14 @@ import '../../../core/providers/auth_provider.dart';
 // Model đại diện cho trạng thái của danh sách phòng cược
 class LobbiesState {
   final List<dynamic> rooms;
+  final List<dynamic> pendingInvitations;
   final dynamic currentRoomDetails;
   final bool isLoading;
   final String? error;
 
   LobbiesState({
     this.rooms = const [],
+    this.pendingInvitations = const [],
     this.currentRoomDetails,
     this.isLoading = false,
     this.error,
@@ -18,12 +20,14 @@ class LobbiesState {
 
   LobbiesState copyWith({
     List<dynamic>? rooms,
+    List<dynamic>? pendingInvitations,
     dynamic currentRoomDetails,
     bool? isLoading,
     String? error,
   }) {
     return LobbiesState(
       rooms: rooms ?? this.rooms,
+      pendingInvitations: pendingInvitations ?? this.pendingInvitations,
       currentRoomDetails: currentRoomDetails ?? this.currentRoomDetails,
       isLoading: isLoading ?? this.isLoading,
       error: error ?? this.error,
@@ -53,6 +57,16 @@ class LobbiesNotifier extends Notifier<LobbiesState> {
         isLoading: false,
         error: 'Lấy danh sách phòng thất bại: $e',
       );
+    }
+  }
+
+  // 1.5 LẤY DANH SÁCH LỜI MỜI CO-OWNER
+  Future<void> fetchPendingInvitations(String userId) async {
+    try {
+      final response = await dioClient.get('/lobbies/pending-invitations/$userId');
+      state = state.copyWith(pendingInvitations: response.data);
+    } catch (e) {
+      print('Lỗi lấy lời mời co-owner: $e');
     }
   }
 

@@ -96,15 +96,13 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
         contribution: contribution,
       );
 
-      // Cập nhật lại số điểm của người dùng trên Client
-      // (Nhân tiện đồng bộ lại AuthNotifier để khớp điểm số)
+      // Cập nhật lại điểm số của người chơi
       ref.read(authProvider.notifier).loginWithEmail(user.email!, "dummy_password_not_needed"); // Refresh auth
       
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Tạo phòng cược thành công!'), backgroundColor: Colors.green),
       );
 
-      // Điều hướng về màn Dashboard quản lý của Chủ phòng vừa tạo
       context.pushReplacement('/rooms/dashboard/${room['code']}');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -113,10 +111,255 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
     }
   }
 
+  void _openMatchSelectorBottomSheet() {
+    // Nhóm trận đấu theo giải đấu
+    final Map<String, List<dynamic>> groupedMatches = {};
+    for (var match in _matches) {
+      final league = match['leagueName'] ?? 'Giải đấu khác';
+      if (!groupedMatches.containsKey(league)) {
+        groupedMatches[league] = [];
+      }
+      groupedMatches[league]!.add(match);
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.75,
+          decoration: const BoxDecoration(
+            color: AppTheme.background,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(AppTheme.radiusMd),
+              topRight: Radius.circular(AppTheme.radiusMd),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 16),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  'CHỌN TRẬN ĐẤU MỤC TIÊU',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                child: Text(
+                  'Chọn một trận đấu trong các giải đấu đang diễn ra để mở phòng cược.',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Divider(color: AppTheme.surfaceBorder, height: 1),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: groupedMatches.entries.map((entry) {
+                    final leagueName = entry.key;
+                    final matches = entry.value;
+                    
+                    // Tính số trận Live và Sắp đá
+                    final liveCount = matches.where((m) => m['status'] == 'LIVE').length;
+                    final upcomingCount = matches.where((m) => m['status'] == 'NS').length;
+                    
+                    String badgeText = '';
+                    if (liveCount > 0) {
+                      badgeText += '$liveCount LIVE';
+                    }
+                    if (upcomingCount > 0) {
+                      if (badgeText.isNotEmpty) badgeText += ' | ';
+                      badgeText += '$upcomingCount sắp đá';
+                    }
+
+                    final String leagueLogo = matches.first['leagueLogo'] ?? 'https://media.api-sports.io/football/leagues/39.png';
+
+                    return Card(
+                      color: AppTheme.surface,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                        side: const BorderSide(color: AppTheme.surfaceBorder),
+                      ),
+                      child: Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          leading: Image.network(
+                            leagueLogo,
+                            width: 24,
+                            height: 24,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 24, color: Colors.white),
+                          ),
+                          title: Text(
+                            leagueName,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          subtitle: Text(
+                            badgeText.isEmpty ? '${matches.length} trận' : badgeText,
+                            style: TextStyle(
+                              color: liveCount > 0 ? AppTheme.success : AppTheme.textSecondary,
+                              fontSize: 11,
+                              fontWeight: liveCount > 0 ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                          children: matches.map((match) {
+                            final bool isLive = match['status'] == 'LIVE';
+                            final bool isFinished = match['status'] == 'FT';
+                            final String statusText = isLive 
+                                ? 'LIVE (${match['minuteElapsed']}\')' 
+                                : isFinished 
+                                    ? 'FINISHED' 
+                                    : 'SẮP ĐÁ';
+                            
+                            final DateTime startTime = DateTime.parse(match['startTime']).toLocal();
+                            final String timeStr = "${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')} - ${startTime.day}/${startTime.month}";
+
+                            return Container(
+                              decoration: const BoxDecoration(
+                                border: Border(top: BorderSide(color: AppTheme.surfaceBorder, width: 0.8)),
+                              ),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                onTap: () {
+                                  setState(() {
+                                    _selectedMatchId = match['id'];
+                                  });
+                                  Navigator.pop(context);
+                                },
+                                title: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Image.network(match['homeLogo'] ?? '', width: 16, height: 16, errorBuilder: (_, __, ___) => const Icon(Icons.shield, size: 16)),
+                                              const SizedBox(width: 8),
+                                              Expanded(child: Text(match['homeTeam'], style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            children: [
+                                              Image.network(match['awayLogo'] ?? '', width: 16, height: 16, errorBuilder: (_, __, ___) => const Icon(Icons.shield, size: 16)),
+                                              const SizedBox(width: 8),
+                                              Expanded(child: Text(match['awayTeam'], style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          isLive ? "${match['homeScore']} - ${match['awayScore']}" : timeStr,
+                                          style: TextStyle(
+                                            color: isLive ? AppTheme.success : Colors.white, 
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          statusText,
+                                          style: TextStyle(
+                                            color: isLive ? AppTheme.success : AppTheme.textSecondary,
+                                            fontSize: 10,
+                                            fontWeight: isLive ? FontWeight.bold : FontWeight.normal,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMatchSelectorField(dynamic selectedMatch) {
+    if (_matches.isEmpty) {
+      return const Text('Chưa có trận đấu nào trong hệ thống.', style: TextStyle(color: AppTheme.textDisabled));
+    }
+    
+    return InkWell(
+      onTap: _openMatchSelectorBottomSheet,
+      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          border: Border.all(color: AppTheme.surfaceBorder),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: selectedMatch == null
+                  ? const Text('Bấm để chọn trận đấu...', style: TextStyle(color: AppTheme.textDisabled, fontSize: 14))
+                  : Row(
+                      children: [
+                        if (selectedMatch['leagueLogo'] != null)
+                          Image.network(selectedMatch['leagueLogo'], width: 20, height: 20, errorBuilder: (_, __, ___) => const Icon(Icons.sports_soccer, size: 20, color: Colors.white))
+                        else
+                          const Icon(Icons.sports_soccer, size: 20, color: Colors.white),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            "${selectedMatch['homeTeam']} vs ${selectedMatch['awayTeam']} (${selectedMatch['leagueName']})",
+                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+            const Icon(Icons.keyboard_arrow_down, color: Colors.white),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider);
     final lobbiesState = ref.watch(lobbiesProvider);
+
+    final selectedMatch = _matches.firstWhere(
+      (m) => m['id'] == _selectedMatchId,
+      orElse: () => null,
+    );
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -163,36 +406,7 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
                       style: TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
-                    _matches.isEmpty
-                        ? const Text('Chưa có trận đấu nào trong hệ thống.', style: TextStyle(color: AppTheme.textDisabled))
-                        : Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: AppTheme.surface,
-                              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                              border: Border.all(color: AppTheme.surfaceBorder),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _selectedMatchId,
-                                dropdownColor: AppTheme.surface,
-                                isExpanded: true,
-                                icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
-                                items: _matches.map((match) {
-                                  return DropdownMenuItem<String>(
-                                    value: match['id'],
-                                    child: Text(
-                                      "${match['homeTeam']} vs ${match['awayTeam']} (${match['leagueName']})",
-                                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                                    ),
-                                  );
-                                }).toList(),
-                                onChanged: (value) {
-                                  setState(() => _selectedMatchId = value);
-                                },
-                              ),
-                            ),
-                          ),
+                    _buildMatchSelectorField(selectedMatch),
                     const SizedBox(height: 20),
 
                     Row(

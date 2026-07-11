@@ -284,6 +284,19 @@ export class MatchesService {
         homeScore: 0,
         awayScore: 0,
         elapsed: 0,
+      },
+      {
+        apiFootballId: 9906,
+        leagueName: 'World Cup',
+        homeTeam: 'Argentina',
+        homeLogo: 'https://media.api-sports.io/football/teams/26.png',
+        awayTeam: 'France',
+        awayLogo: 'https://media.api-sports.io/football/teams/2.png',
+        timeOffsetHours: 8,
+        status: 'NS' as const,
+        homeScore: 0,
+        awayScore: 0,
+        elapsed: 0,
       }
     ];
 
@@ -302,7 +315,9 @@ export class MatchesService {
         create: {
           apiFootballId: match.apiFootballId,
           leagueName: match.leagueName,
-          leagueLogo: 'https://media.api-sports.io/football/leagues/39.png',
+          leagueLogo: match.leagueName == 'World Cup'
+              ? 'https://media.api-sports.io/football/leagues/1.png'
+              : 'https://media.api-sports.io/football/leagues/39.png',
           homeTeam: match.homeTeam,
           homeLogo: match.homeLogo,
           awayTeam: match.awayTeam,
