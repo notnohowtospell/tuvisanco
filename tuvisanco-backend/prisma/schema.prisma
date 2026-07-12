@@ -91,7 +91,15 @@ model Match {
   homeScore        Int         @default(0)
   awayScore        Int         @default(0)
   minuteElapsed    Int         @default(0)
-  
+
+  // Các trường bổ sung cho giao diện
+  homeShots        Int         @default(0)
+  awayShots        Int         @default(0)
+  homeYellowCards  Int         @default(0)
+  awayYellowCards  Int         @default(0)
+  homeRedCards     Int         @default(0)
+  awayRedCards     Int         @default(0)
+
   // Cache H2H, Đội hình & Thống kê trận đấu
   lineupHome       Json?
   lineupAway       Json?

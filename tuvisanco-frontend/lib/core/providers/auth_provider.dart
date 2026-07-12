@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
+import '../network/dio_client.dart';
 
 // 1. Model giữ nguyên cấu trúc của bạn
 class AuthState {
@@ -44,15 +45,6 @@ class AuthState {
 
 // 2. Notifier quản lý kết nối API thật
 class AuthNotifier extends Notifier<AuthState> {
-  // Định nghĩa Dio và Base URL kết nối Backend
-  // ĐÃ SỬA: Sử dụng 10.0.2.2 để kết nối chính xác từ máy ảo Android Studio tới localhost máy chủ
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: "http://10.0.2.2:3000/auth",
-    connectTimeout: const Duration(seconds: 5),
-    receiveTimeout: const Duration(seconds: 5),
-  ));
-
-
   @override
   AuthState build() {
     return AuthState();
@@ -73,7 +65,8 @@ class AuthNotifier extends Notifier<AuthState> {
 
     try {
       // Gọi API Đăng ký xuống NestJS
-      final response = await _dio.post('/register', data: {
+      // ĐÃ SỬA: Sử dụng dioClient dùng chung cho toàn dự án
+      final response = await dioClient.post('/auth/register', data: {
         "email": email,
         "password": password,
         "name": username, // Gửi lên trường 'name' để Backend hứng thành 'fullName'
@@ -91,9 +84,21 @@ class AuthNotifier extends Notifier<AuthState> {
         isLoading: false,
       );
     } on DioException catch (e) {
-      // Bốc lỗi từ NestJS gửi về (ví dụ: 'Email này đã được sử dụng!')
-      final errorMessage = e.response?.data['message'] ?? "Đăng ký thất bại.";
-      state = state.copyWith(isLoading: false, error: errorMessage.toString());
+      // Bốc lỗi chi tiết để dễ dàng kiểm tra
+      String errorMessage = "Lỗi kết nối server.";
+      
+      if (e.type == DioExceptionType.connectionTimeout) {
+        errorMessage = "Kết nối quá hạn (Timeout). Kiểm tra IP/Firewall.";
+      } else if (e.type == DioExceptionType.connectionError) {
+        errorMessage = "Không thể kết nối tới server. Kiểm tra Wi-Fi và IP.";
+      } else if (e.response != null) {
+        // Lỗi từ phía Server trả về (400, 401, 404, 500)
+        errorMessage = e.response?.data['message']?.toString() ?? "Lỗi server (${e.response?.statusCode})";
+      } else {
+        errorMessage = e.message ?? "Đăng ký thất bại.";
+      }
+      
+      state = state.copyWith(isLoading: false, error: errorMessage);
     }
   }
 
@@ -103,7 +108,8 @@ class AuthNotifier extends Notifier<AuthState> {
 
     try {
       // Gọi API Đăng nhập xuống NestJS
-      final response = await _dio.post('/login', data: {
+      // ĐÃ SỬA: Sử dụng dioClient dùng chung
+      final response = await dioClient.post('/auth/login', data: {
         "email": email,
         "password": password,
       });

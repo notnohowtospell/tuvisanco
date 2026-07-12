@@ -3,9 +3,13 @@ import 'package:go_router/go_router.dart';
 import 'theme.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
-import '../features/auth/presentation/home_screen.dart';
+// Lưu ý: Xem lại file dưới này tên class là HomeScreen hay ProfileScreen, nếu là màn hồ sơ thì nên đổi tên cho đỡ lộn với HomeScreen của trận đấu
+import '../features/auth/presentation/home_screen.dart' as auth;
 
-// Import các màn hình Lobbies của Huy (Sẽ tạo ở bước tiếp theo)
+// 1. IMPORT màn hình trận đấu thật của bạn ở đây
+import '../features/matches/presentation/home_screen.dart';
+
+// Import các màn hình Lobbies của Huy
 import '../features/lobbies/presentation/rooms_screen.dart';
 import '../features/lobbies/presentation/create_room_screen.dart';
 import '../features/lobbies/presentation/room_dashboard_screen.dart';
@@ -13,20 +17,7 @@ import '../features/lobbies/presentation/join_room_screen.dart';
 import '../features/lobbies/presentation/room_detail_screen.dart';
 import '../features/lobbies/presentation/pl_dashboard_screen.dart';
 
-// Mocks tạm cho các màn hình của thành viên khác để đảm bảo biên dịch thông suốt
-class MockMatchesScreen extends StatelessWidget {
-  const MockMatchesScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Lịch Thi Đấu')),
-      body: const Center(
-        child: Text('Danh sách trận đấu bóng đá (Cường phụ trách)'),
-      ),
-    );
-  }
-}
-
+// Mocks tạm cho các màn hình của thành viên khác
 class MockLeaderboardScreen extends StatelessWidget {
   const MockLeaderboardScreen({super.key});
   @override
@@ -154,9 +145,10 @@ final GoRouter appRouter = GoRouter(
         return NavigationShellWrapper(child: child);
       },
       routes: <RouteBase>[
+        // 2. SỬA CHỖ NÀY: Đưa màn hình HomeScreen thật của bạn vào tab /home
         GoRoute(
           path: '/home',
-          builder: (context, state) => const MockMatchesScreen(),
+          builder: (context, state) => const HomeScreen(),
         ),
         GoRoute(
           path: '/rooms',
@@ -170,13 +162,14 @@ final GoRouter appRouter = GoRouter(
           path: '/news',
           builder: (context, state) => const MockNewsScreen(),
         ),
+        // 3. SỬA CHỖ NÀY: Trả lại màn hình Hồ sơ gốc của tính năng Auth (tránh trùng tên class)
         GoRoute(
           path: '/profile',
-          builder: (context, state) => const HomeScreen(),
+          builder: (context, state) => const auth.HomeScreen(),
         ),
       ],
     ),
-    
+
     // Các màn hình dạng Push (không nằm dưới Bottom Nav)
     GoRoute(
       path: '/rooms/create',
