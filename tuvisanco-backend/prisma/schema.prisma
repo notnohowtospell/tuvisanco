@@ -64,6 +64,8 @@ model User {
   totalPoints   Int               @default(200) // Cấp 200 điểm khởi đầu (UC01)
   streakCurrent Int               @default(0)   // Chuỗi dự đoán đúng hiện tại (UC18)
   streakMax     Int               @default(0)   // Chuỗi dự đoán đúng dài nhất (UC18)
+  lastCheckInDateTime DateTime?
+  checkInStreak       Int               @default(0)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../data/lobbies_provider.dart';
+import 'package:dio/dio.dart';
 
 class JoinRoomScreen extends ConsumerStatefulWidget {
   const JoinRoomScreen({super.key});
@@ -91,8 +92,15 @@ class _JoinRoomScreenState extends ConsumerState<JoinRoomScreen> with SingleTick
       context.pushReplacement('/rooms/detail/${room['code']}');
     } catch (e) {
       setState(() => _isLoading = false);
+      String message = e.toString();
+      if (e is DioException) {
+        final serverMsg = e.response?.data?['message'];
+        if (serverMsg != null) {
+          message = serverMsg is List ? serverMsg.join(', ') : serverMsg.toString();
+        }
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không tìm thấy phòng: ${e.toString()}'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Không tìm thấy phòng: $message'), backgroundColor: Colors.red),
       );
       _triggerShake();
     }

@@ -232,6 +232,32 @@ export class LobbiesService {
         });
       }
 
+      // Tự động tính toán lại và nới rộng exposureLimit cho tất cả kèo đang hoạt động
+      const activeMarkets = await tx.betMarket.findMany({
+        where: { roomId, status: { in: ['OPEN', 'LOCKED'] } },
+      });
+
+      for (const market of activeMarkets) {
+        const marketOptions = market.options as any[];
+        let maxOdd = 1.10;
+        marketOptions.forEach((opt) => {
+          if (opt.odd > maxOdd) {
+            maxOdd = opt.odd;
+          }
+        });
+
+        const newExposureLimit = Math.floor(totalPool / maxOdd);
+        const shouldUnlock = (market.status === 'LOCKED' && newExposureLimit > market.currentExposure);
+
+        await tx.betMarket.update({
+          where: { id: market.id },
+          data: {
+            exposureLimit: newExposureLimit,
+            status: shouldUnlock ? 'OPEN' : market.status,
+          },
+        });
+      }
+
       // Thêm Co-owner vào thành viên phòng nếu chưa có
       const memberExists = await tx.lobbyMember.findUnique({
         where: { roomId_userId: { roomId, userId } },
@@ -281,6 +307,7 @@ export class LobbiesService {
       id: opt.id,
       label: opt.label,
       odd: opt.odd,
+      initialOdd: opt.odd, // Lưu tỷ lệ ban đầu làm tham chiếu cân bằng odds
       totalBetPoints: 0,
     }));
 
@@ -360,6 +387,15 @@ export class LobbiesService {
       throw new BadRequestException('Kèo cược này đã khóa hoặc đã đóng.');
     }
 
+    // Tính toán giới hạn cược tối đa động cho người chơi
+    const membersCount = await this.prisma.lobbyMember.count({ where: { roomId } });
+    const totalMembers = Math.max(2, membersCount + 1); // 1 owner + co-owners/members
+    const maxBetLimit = Math.max(20, Math.floor(market.exposureLimit / totalMembers));
+
+    if (points > maxBetLimit) {
+      throw new BadRequestException(`Số điểm cược tối đa trên mỗi lượt cho kèo này là ${maxBetLimit} điểm để đảm bảo mọi người đều có cơ hội tham gia.`);
+    }
+
     // Lấy thông số odd của lựa chọn
     const options = market.options as any[];
     const targetOption = options.find((opt) => opt.id === optionId);
@@ -382,23 +418,39 @@ export class LobbiesService {
         data: { totalPoints: { decrement: points } },
       });
 
-      // 2. Cập nhật Exposure trong BetMarket
+      // 2. Tính toán Cân bằng Odds (Odds Balancing) & Cập nhật cược rủi ro
       const updatedExposure = market.currentExposure + potentialPayout;
       const isLimitReached = updatedExposure >= market.exposureLimit;
 
-      // Cập nhật tổng cược của lựa chọn đó
-      const updatedOptions = options.map((opt) => {
-        if (opt.id === optionId) {
-          return { ...opt, totalBetPoints: (opt.totalBetPoints || 0) + points };
-        }
-        return opt;
+      // Tính toán dòng tiền cược tạm tính (cộng điểm cược mới)
+      const stakesOptions = options.map((opt) => {
+        const totalStakes = (opt.id === optionId) ? (opt.totalBetPoints || 0) + points : (opt.totalBetPoints || 0);
+        return { ...opt, totalBetPoints: totalStakes };
+      });
+
+      const totalStakes = stakesOptions.reduce((sum, opt) => sum + opt.totalBetPoints, 0);
+      const epsilon = 50; // smoothing factor
+      const gamma = totalStakes / (totalStakes + 100); // weight factor
+
+      const balancedOptions = stakesOptions.map((opt) => {
+        const initialOdd = opt.initialOdd || opt.odd;
+        const p_initial = 1 / initialOdd;
+        const p_volume = (opt.totalBetPoints + epsilon) / (totalStakes + 2 * epsilon);
+        const p_new = (1 - gamma) * p_initial + gamma * p_volume;
+        const odd_new = Math.max(1.10, Math.min(10.0, parseFloat((1 / p_new).toFixed(2))));
+        
+        return {
+          ...opt,
+          odd: odd_new,
+          initialOdd: initialOdd,
+        };
       });
 
       await tx.betMarket.update({
         where: { id: marketId },
         data: {
           currentExposure: updatedExposure,
-          options: updatedOptions as any,
+          options: balancedOptions as any,
           status: isLimitReached ? 'LOCKED' : 'OPEN', // Tự động khóa kèo khi đạt kịch kim giới hạn
         },
       });

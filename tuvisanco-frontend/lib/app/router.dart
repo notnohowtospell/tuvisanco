@@ -3,8 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'theme.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
-// Lưu ý: Xem lại file dưới này tên class là HomeScreen hay ProfileScreen, nếu là màn hồ sơ thì nên đổi tên cho đỡ lộn với HomeScreen của trận đấu
-import '../features/auth/presentation/home_screen.dart' as auth;
+import '../features/auth/presentation/home_screen.dart';
+import '../features/auth/presentation/profile_screen.dart';
 
 // 1. IMPORT màn hình trận đấu thật của bạn ở đây
 import '../features/matches/presentation/home_screen.dart';
@@ -165,7 +165,7 @@ final GoRouter appRouter = GoRouter(
         // 3. SỬA CHỖ NÀY: Trả lại màn hình Hồ sơ gốc của tính năng Auth (tránh trùng tên class)
         GoRoute(
           path: '/profile',
-          builder: (context, state) => const auth.HomeScreen(),
+          builder: (context, state) => const ProfileScreen(),
         ),
       ],
     ),

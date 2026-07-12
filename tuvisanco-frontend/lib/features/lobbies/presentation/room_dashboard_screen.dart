@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
-import '../../../core/network/dio_client.dart';
 import '../data/lobbies_provider.dart';
 import 'package:dio/dio.dart';
 
@@ -213,8 +212,15 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
         const SnackBar(content: Text('Quyết toán kèo vui thành công!'), backgroundColor: Colors.green),
       );
     } catch (e) {
+      String message = e.toString();
+      if (e is DioException) {
+        final serverMsg = e.response?.data?['message'];
+        if (serverMsg != null) {
+          message = serverMsg is List ? serverMsg.join(', ') : serverMsg.toString();
+        }
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi quyết toán: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Lỗi quyết toán: $message'), backgroundColor: Colors.red),
       );
     }
   }
@@ -228,8 +234,15 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
       );
       context.pop();
     } catch (e) {
+      String message = e.toString();
+      if (e is DioException) {
+        final serverMsg = e.response?.data?['message'];
+        if (serverMsg != null) {
+          message = serverMsg is List ? serverMsg.join(', ') : serverMsg.toString();
+        }
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Giải tán phòng thất bại: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Giải tán phòng thất bại: $message'), backgroundColor: Colors.red),
       );
     }
   }
