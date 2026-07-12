@@ -114,6 +114,10 @@ model Match {
   aiLossProb       Float?      
   aiAnalysis       String?     
   
+  // Thông tin chi tiết
+  stadium          String?
+  referee          String?
+  
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
