@@ -3,11 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'theme.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/register_screen.dart';
-import '../features/auth/presentation/home_screen.dart';
 import '../features/auth/presentation/profile_screen.dart';
 
 // 1. IMPORT màn hình trận đấu thật của bạn ở đây
 import '../features/matches/presentation/home_screen.dart';
+import '../features/matches/presentation/match_detail_screen.dart';
 
 // Import các màn hình Lobbies của Huy
 import '../features/lobbies/presentation/rooms_screen.dart';
@@ -198,6 +198,13 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) {
         final code = state.pathParameters['code'] ?? '';
         return PLDashboardScreen(roomCode: code);
+      },
+    ),
+    GoRoute(
+      path: '/match/detail/:id',
+      builder: (context, state) {
+        final id = state.pathParameters['id'] ?? '';
+        return MatchDetailScreen(matchId: id);
       },
     ),
   ],

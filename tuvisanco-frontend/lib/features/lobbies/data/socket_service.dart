@@ -5,7 +5,7 @@ class SocketService {
 
   void connect(String roomCode) {
     // Kết nối tới WebSockets Namespace 'lobbies' trên Backend
-    socket = IO.io('http://10.0.2.2:3000/lobbies', <String, dynamic>{
+    socket = IO.io('http://127.0.0.1:3005/lobbies', <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
     });

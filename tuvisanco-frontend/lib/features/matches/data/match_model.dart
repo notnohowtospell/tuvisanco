@@ -20,6 +20,17 @@ class MatchModel {
   final int homeRedCards;
   final int awayRedCards;
 
+  // AI Prediction Fields
+  final double? aiWinProb;
+  final double? aiDrawProb;
+  final double? aiLossProb;
+  final String? aiAnalysis;
+
+  // New Details
+  final String? stadium;
+  final String? referee;
+  final List<dynamic>? h2hHistory;
+
   MatchModel({
     required this.id,
     required this.apiFootballId,
@@ -39,6 +50,13 @@ class MatchModel {
     this.awayYellowCards = 0,
     this.homeRedCards = 0,
     this.awayRedCards = 0,
+    this.aiWinProb,
+    this.aiDrawProb,
+    this.aiLossProb,
+    this.aiAnalysis,
+    this.stadium,
+    this.referee,
+    this.h2hHistory,
   });
 
   factory MatchModel.fromJson(Map<String, dynamic> json) {
@@ -61,6 +79,13 @@ class MatchModel {
       awayYellowCards: json['awayYellowCards'] ?? 0,
       homeRedCards: json['homeRedCards'] ?? 0,
       awayRedCards: json['awayRedCards'] ?? 0,
+      aiWinProb: json['aiWinProb'] != null ? (json['aiWinProb'] as num).toDouble() : null,
+      aiDrawProb: json['aiDrawProb'] != null ? (json['aiDrawProb'] as num).toDouble() : null,
+      aiLossProb: json['aiLossProb'] != null ? (json['aiLossProb'] as num).toDouble() : null,
+      aiAnalysis: json['aiAnalysis'],
+      stadium: json['stadium'],
+      referee: json['referee'],
+      h2hHistory: json['h2hHistory'],
     );
   }
 }
