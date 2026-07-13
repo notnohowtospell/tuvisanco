@@ -1,11 +1,8 @@
 import 'package:dio/dio.dart';
 import 'dart:io';
 
-// IP máy tính của bạn (Dùng được cho cả Máy thật và Máy ảo nếu cùng mạng Wi-Fi)
-const String _baseUrl = 'http://127.0.0.1:3005';
-
-// Nếu ai trong nhóm muốn dùng IP máy ảo riêng của họ (10.0.2.2), có thể đổi biến này
-// const String _baseUrl = 'http://10.0.2.2:3000';
+// IP máy ảo Android để kết nối tới Backend host (chạy ở cổng 3000)
+const String _baseUrl = 'http://10.0.2.2:3000';
 
 final dioClient = Dio(
   BaseOptions(

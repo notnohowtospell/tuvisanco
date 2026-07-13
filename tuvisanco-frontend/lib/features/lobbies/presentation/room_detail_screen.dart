@@ -7,6 +7,8 @@ import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../data/lobbies_provider.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:intl/intl.dart';
 
 // Lưu trữ danh sách mã cược đã hiển thị thông báo để tránh lặp lại
 final Set<String> _notifiedBetIds = {};
@@ -25,6 +27,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
   bool _showWonBanner = false;
   int _wonPointsSum = 0;
   Timer? _bannerTimer;
+  bool _showStats = false;
 
   @override
   void initState() {
@@ -36,6 +39,84 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
     Future.microtask(() {
       ref.read(lobbiesProvider.notifier).getLobbyDetails(widget.roomCode);
     });
+  }
+
+  Widget _teamLogo(String? url, Color fallbackColor, {double size = 24}) {
+    if (url == null || url.isEmpty) {
+      return Icon(Icons.shield, color: fallbackColor, size: size);
+    }
+    final originalUrl = url.trim();
+    final proxiedUrl = 'http://10.0.2.2:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size / 8),
+      child: originalUrl.toLowerCase().endsWith('.svg')
+          ? SvgPicture.network(
+              proxiedUrl,
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
+              placeholderBuilder: (_) => Icon(Icons.shield, color: fallbackColor, size: size),
+            )
+          : Image.network(
+              proxiedUrl,
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => Icon(Icons.shield, color: fallbackColor, size: size),
+            ),
+    );
+  }
+
+  Widget _buildMiniStatBar(String title, int homeVal, int awayVal, {Color homeColor = Colors.greenAccent, Color awayColor = Colors.amber}) {
+    int total = homeVal + awayVal;
+    if (total == 0) total = 1;
+    double homeRatio = homeVal / total;
+    double awayRatio = awayVal / total;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('$homeVal', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+              Text(title, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+              Text('$awayVal', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(topLeft: Radius.circular(3), bottomLeft: Radius.circular(3)),
+                  child: LinearProgressIndicator(
+                    value: homeRatio,
+                    backgroundColor: Colors.white12,
+                    valueColor: AlwaysStoppedAnimation<Color>(homeColor),
+                    minHeight: 4,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(topRight: Radius.circular(3), bottomRight: Radius.circular(3)),
+                  child: LinearProgressIndicator(
+                    value: awayRatio,
+                    backgroundColor: Colors.white12,
+                    valueColor: AlwaysStoppedAnimation<Color>(awayColor),
+                    minHeight: 4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -122,8 +203,6 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                     const SizedBox(height: 20),
-
-
 
                     // Ô nhập cược
                     Row(
@@ -254,16 +333,17 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
   void _showBetSuccessDialog(String label, double odd, int points, int payout) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-          child: AlertDialog(
-            backgroundColor: AppTheme.surface,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
-            content: Column(
+        return Dialog(
+          backgroundColor: AppTheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.check_circle, color: AppTheme.success, size: 64),
+                const Icon(Icons.check_circle_outline, color: AppTheme.success, size: 64),
                 const SizedBox(height: 16),
                 const Text(
                   'Đặt Cược Thành Công!',
@@ -377,172 +457,450 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_showWonBanner) ...[
-              Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                  border: Border.all(color: Colors.greenAccent.withOpacity(0.4)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.stars, color: Colors.greenAccent, size: 24),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '🎉 Chúc mừng! Bạn đã thắng cược!',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Bạn đã thắng $_wonPointsSum điểm từ các cược đã quyết toán trong phòng này!',
-                            style: const TextStyle(color: Colors.greenAccent, fontSize: 12, height: 1.3),
-                          ),
-                        ],
+      body: RefreshIndicator(
+        onRefresh: () async => _refreshDetails(),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_showWonBanner) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    border: Border.all(color: Colors.greenAccent.withOpacity(0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.stars, color: Colors.greenAccent, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              '🎉 Chúc mừng! Bạn đã thắng cược!',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Bạn đã thắng $_wonPointsSum điểm từ các cược đã quyết toán trong phòng này!',
+                              style: const TextStyle(color: Colors.greenAccent, fontSize: 12, height: 1.3),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.greenAccent, size: 18),
-                      onPressed: () {
-                        setState(() {
-                          _showWonBanner = false;
-                        });
-                      },
-                    ),
-                  ],
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.greenAccent, size: 18),
+                        onPressed: () {
+                          setState(() {
+                            _showWonBanner = false;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-            // Thông tin trận và nhà cái
-            Card(
-              color: AppTheme.surface,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text(
-                      matchDesc,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Tổng quỹ phòng: ${room['totalPool']} pts',
-                      style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Host: ${room['owner']['fullName']}',
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
+              ],
+              
+              // Thông tin trận và nhà cái (Cao Cấp)
+              () {
+                final match = room['match'];
+                final DateTime? matchTime = match != null && match['startTime'] != null 
+                    ? DateTime.tryParse(match['startTime'].toString()) 
+                    : null;
 
-            const Text(
-              'KÈO ĐANG MỞ CƯỢC (OPEN)',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-
-            if (room['markets'] == null || room['markets'].isEmpty)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32.0),
-                  child: Text('Chưa có kèo nào mở cược.', style: TextStyle(color: AppTheme.textDisabled)),
-                ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: room['markets'].length,
-                itemBuilder: (context, index) {
-                  final market = room['markets'][index];
-                  final options = market['options'] as List<dynamic>;
-
-                  return Card(
-                    color: AppTheme.surfaceElevated,
-                    margin: const EdgeInsets.only(bottom: 12.0),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                if (match != null) {
+                  return Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF1B2342), Color(0xFF0F141C)],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.08), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        )
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        // League Header
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                          child: Row(
                             children: [
+                              const Icon(Icons.emoji_events, color: Colors.amber, size: 16),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  market['title'],
-                                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                  match['leagueName'] ?? 'Giải đấu',
+                                  style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if (market['category'] == 'FUN_BET')
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.accentPink.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                                  ),
-                                  child: const Text(
-                                    'KÈO VUI',
-                                    style: TextStyle(color: AppTheme.accentPink, fontSize: 9, fontWeight: FontWeight.bold),
-                                  ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.warning.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
+                                child: Text(
+                                  'Host: ${room['owner']['fullName']}',
+                                  style: const TextStyle(color: AppTheme.warning, fontSize: 9, fontWeight: FontWeight.bold),
+                                ),
+                              ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: options.map((opt) {
-                              return Expanded(
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                                  child: ElevatedButton(
-                                    onPressed: market['status'] != 'OPEN'
-                                        ? null
-                                        : () => _openBetSlip(room, market, opt),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppTheme.surface,
-                                      foregroundColor: Colors.white,
-                                      elevation: 0,
-                                      minimumSize: const Size(double.infinity, 44),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                                        side: const BorderSide(color: AppTheme.surfaceBorder),
-                                      ),
+                        ),
+                        const Divider(color: Colors.white10, height: 1),
+                        // Match Teams & Score Row
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          child: Row(
+                            children: [
+                              // Home Team
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    _teamLogo(match['homeLogo'], Colors.blueAccent, size: 40),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      match['homeTeam'] ?? '',
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                                     ),
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Text(opt['label'], style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                                        const SizedBox(height: 2),
-                                        Text('x${opt['odd']}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                                      ],
-                                    ),
-                                  ),
+                                  ],
                                 ),
-                              );
-                            }).toList(),
+                              ),
+                              // Score & Status Center
+                              SizedBox(
+                                width: 100,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    if (match['status'] == 'NS') ...[
+                                      Text(
+                                        matchTime != null ? DateFormat('HH:mm').format(matchTime.toLocal()) : '--:--',
+                                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'Sắp diễn ra',
+                                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                                      ),
+                                    ] else ...[
+                                      Text(
+                                        '${match['homeScore']} - ${match['awayScore']}',
+                                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      if (match['status'] == 'LIVE')
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.greenAccent.withOpacity(0.12),
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: Text(
+                                            "LIVE ${match['minuteElapsed']}'",
+                                            style: const TextStyle(color: Colors.greenAccent, fontSize: 9, fontWeight: FontWeight.bold),
+                                          ),
+                                        )
+                                      else
+                                        const Text(
+                                          'Đã kết thúc',
+                                          style: TextStyle(color: Colors.white54, fontSize: 10),
+                                        ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              // Away Team
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    _teamLogo(match['awayLogo'], Colors.redAccent, size: 40),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      match['awayTeam'] ?? '',
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                        const Divider(color: Colors.white10, height: 1),
+                        // Footer: Pool and check status
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Tổng quỹ: ${room['totalPool']} pts',
+                                style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold, fontSize: 12),
+                              ),
+                              GestureDetector(
+                                onTap: () => context.push('/match/detail/${match['id']}'),
+                                child: Row(
+                                  children: const [
+                                    Text('Chi tiết trận', style: TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.bold)),
+                                    SizedBox(width: 2),
+                                    Icon(Icons.chevron_right, color: AppTheme.primary, size: 14),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   );
-                },
+                } else {
+                  return Card(
+                    color: AppTheme.surface,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(matchDesc, style: const TextStyle(color: Colors.white)),
+                    ),
+                  );
+                }
+              }(),
+
+              // Bảng thông số trận đấu trực tiếp (Live Stats Accordion)
+              () {
+                final match = room['match'];
+                if (match != null && match['status'] != 'NS') {
+                  return Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      GestureDetector(
+                        onTap: () => setState(() => _showStats = !_showStats),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.surfaceBorder),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.analytics_outlined, color: Colors.blueAccent, size: 20),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Thông số trận đấu trực tiếp',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              const Spacer(),
+                              Icon(
+                                _showStats ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                color: AppTheme.textSecondary,
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_showStats) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surfaceElevated,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.surfaceBorder),
+                          ),
+                          child: Column(
+                            children: [
+                              _buildMiniStatBar('Sút bóng', (match['homeShots'] as num?)?.toInt() ?? 0, (match['awayShots'] as num?)?.toInt() ?? 0),
+                              _buildMiniStatBar('Thẻ vàng', (match['homeYellowCards'] as num?)?.toInt() ?? 0, (match['awayYellowCards'] as num?)?.toInt() ?? 0, homeColor: Colors.amber, awayColor: Colors.amber),
+                              _buildMiniStatBar('Thẻ đỏ', (match['homeRedCards'] as num?)?.toInt() ?? 0, (match['awayRedCards'] as num?)?.toInt() ?? 0, homeColor: Colors.redAccent, awayColor: Colors.redAccent),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                }
+                return const SizedBox.shrink();
+              }(),
+
+              const SizedBox(height: 24),
+
+              const Text(
+                'KÈO ĐANG MỞ CƯỢC (OPEN)',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.bold),
               ),
-          ],
+              const SizedBox(height: 12),
+
+              if (room['markets'] == null || room['markets'].isEmpty)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32.0),
+                    child: Text('Chưa có kèo nào mở cược.', style: TextStyle(color: AppTheme.textDisabled)),
+                  ),
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: room['markets'].length,
+                  itemBuilder: (context, index) {
+                    final market = room['markets'][index];
+                    final options = market['options'] as List<dynamic>;
+
+                    final placedBets = room['placedBets'] as List<dynamic>? ?? [];
+                    final Map<String, int> optionBetSums = {};
+                    int totalMarketBets = 0;
+                    for (var opt in options) {
+                      final optId = opt['id'].toString();
+                      final int sum = placedBets
+                          .where((b) => b['marketId'].toString() == market['id'].toString() && b['optionId'].toString() == optId)
+                          .fold<int>(0, (prev, element) => prev + (element['points'] as num).toInt());
+                      optionBetSums[optId] = sum;
+                      totalMarketBets += sum;
+                    }
+
+                    return Card(
+                      color: AppTheme.surfaceElevated,
+                      margin: const EdgeInsets.only(bottom: 12.0),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    market['title'],
+                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                ),
+                                if (market['category'] == 'FUN_BET')
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.accentPink.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                                    ),
+                                    child: const Text(
+                                      'KÈO VUI',
+                                      style: TextStyle(color: AppTheme.accentPink, fontSize: 9, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: options.map((opt) {
+                                return Expanded(
+                                  child: Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                                    child: ElevatedButton(
+                                      onPressed: market['status'] != 'OPEN'
+                                          ? null
+                                          : () => _openBetSlip(room, market, opt),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.surface,
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        minimumSize: const Size(double.infinity, 44),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                                          side: const BorderSide(color: AppTheme.surfaceBorder),
+                                        ),
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(opt['label'], style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                          const SizedBox(height: 2),
+                                          Text('x${opt['odd']}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            // Phân bổ lượng cược trong phòng (Bet Distribution)
+                            if (totalMarketBets > 0) ...[
+                              const SizedBox(height: 16),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Phân bổ lượng cược trong phòng:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                                  Text('Tổng: $totalMarketBets pts', style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              // Dual progress bar
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                                child: Container(
+                                  height: 6,
+                                  width: double.infinity,
+                                  color: Colors.white12,
+                                  child: Row(
+                                    children: options.where((opt) => (optionBetSums[opt['id'].toString()] ?? 0) > 0).map((opt) {
+                                      final optId = opt['id'].toString();
+                                      final sum = optionBetSums[optId] ?? 0;
+                                      final idx = options.indexOf(opt);
+                                      final color = idx == 0 ? Colors.greenAccent : (idx == 1 ? Colors.amber : Colors.blueAccent);
+                                      return Expanded(
+                                        flex: sum,
+                                        child: Container(color: color),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              // Text labels
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: options.map((opt) {
+                                  final optId = opt['id'].toString();
+                                  final sum = optionBetSums[optId] ?? 0;
+                                  final percent = totalMarketBets > 0 ? (sum * 100 / totalMarketBets).round() : 0;
+                                  final idx = options.indexOf(opt);
+                                  final color = idx == 0 ? Colors.greenAccent : (idx == 1 ? Colors.amber : Colors.blueAccent);
+                                  return Text(
+                                    '${opt['label']}: $percent% ($sum pts)',
+                                    style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
         ),
       ),
     );
