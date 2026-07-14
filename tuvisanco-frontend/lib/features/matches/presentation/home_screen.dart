@@ -20,6 +20,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   DateTime _selectedDate = DateTime.now();
   Future<List<MatchModel>>? _matchesFuture;
   List<String> _selectedLeagues = [];
+  bool _isDateSelected = false; // Theo dõi xem user đã chọn ngày cụ thể chưa
 
   @override
   void initState() {
@@ -29,11 +30,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<List<MatchModel>> _fetchMatches() async {
     try {
-      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final response = await dioClient.get('/matches?date=$dateStr');
+      final String url;
+      if (_isDateSelected) {
+        final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+        url = '/matches?date=$dateStr';
+      } else {
+        url = '/matches'; // Để backend tự chọn ngày gần nhất
+      }
+      final response = await dioClient.get(url);
       if (response.statusCode == 200) {
         List<dynamic> data = response.data;
-        return data.map((json) => MatchModel.fromJson(json)).toList();
+        final matches = data.map((json) => MatchModel.fromJson(json)).toList();
+        // Cập nhật ngày hiển thị theo trận đầu tiên nhận được
+        if (matches.isNotEmpty && !_isDateSelected) {
+          setState(() {
+            _selectedDate = matches.first.startTime.toLocal();
+          });
+        }
+        return matches;
       }
       return [];
     } catch (e) {
@@ -100,24 +114,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _showLeagueFilter() async {
     final matches = await _matchesFuture;
     if (matches == null || matches.isEmpty) return;
-
     if (!mounted) return;
 
-    final selected = await Navigator.push<List<String>>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => LeagueFilterScreen(
-          matches: matches,
-          initiallySelected: _selectedLeagues,
-        ),
+    // Dùng BottomSheet thay vì Navigator.push để tránh xung đột go_router trên web
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0B0F16),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => _LeagueFilterSheet(
+        matches: matches,
+        initiallySelected: _selectedLeagues,
+        onConfirm: (selected) {
+          setState(() {
+            _selectedLeagues = selected;
+          });
+          Navigator.pop(context);
+        },
       ),
     );
-
-    if (selected != null && mounted) {
-      setState(() {
-        _selectedLeagues = selected;
-      });
-    }
   }
 
   Widget _buildTabs() {
@@ -176,6 +193,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             if (date != null) {
               setState(() {
                 _selectedDate = date;
+                _isDateSelected = true;
                 _matchesFuture = _fetchMatches();
               });
             }
@@ -443,6 +461,213 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) => Icon(Icons.shield, color: fallbackColor, size: size),
             ),
+    );
+  }
+}
+
+// ── BottomSheet lọc giải đấu (tránh xung đột go_router trên web) ──
+class _LeagueFilterSheet extends StatefulWidget {
+  final List<MatchModel> matches;
+  final List<String> initiallySelected;
+  final void Function(List<String>) onConfirm;
+
+  const _LeagueFilterSheet({
+    required this.matches,
+    required this.initiallySelected,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_LeagueFilterSheet> createState() => _LeagueFilterSheetState();
+}
+
+class _LeagueFilterSheetState extends State<_LeagueFilterSheet> {
+  late List<String> _selectedLeagues;
+  late Map<String, int> _leagueCounts;
+  late Map<String, List<String>> _countryGroups;
+  late List<String> _sortedCountries;
+  late List<String> _allLeagues;
+
+  final Map<String, String> _leagueToCountry = {
+    'FIFA World Cup 2026': 'THẾ GIỚI',
+    'UEFA Champions League': 'CHÂU ÂU',
+    'UEFA Women\'s Champions League': 'CHÂU ÂU',
+    'Premier League': 'ANH',
+    'Bundesliga': 'ĐỨC',
+    'Brasileirão Série A': 'BRAZIL',
+    'Brasileirão Série B': 'BRAZIL',
+    'Copa América': 'NAM MỸ',
+    'Copa do Brasil': 'BRAZIL',
+    'CONCACAF Champions Cup': 'CONCACAF',
+    'AFC Champions League': 'CHÂU Á',
+    'Club World Championship': 'THẾ GIỚI',
+    'Africa Cup of Nations': 'CHÂU PHI',
+    'Allsvenskan': 'CHÂU ÂU',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _leagueCounts = {};
+    for (var m in widget.matches) {
+      _leagueCounts[m.leagueName] = (_leagueCounts[m.leagueName] ?? 0) + 1;
+    }
+    _allLeagues = _leagueCounts.keys.toList();
+
+    _countryGroups = {};
+    for (var league in _allLeagues) {
+      final country = _leagueToCountry[league] ?? 'KHÁC';
+      (_countryGroups[country] ??= []).add(league);
+    }
+    // Sắp xếp: THẾ GIỚI lên đầu, rồi theo alphabet
+    _sortedCountries = _countryGroups.keys.toList()
+      ..sort((a, b) {
+        if (a == 'THẾ GIỚI') return -1;
+        if (b == 'THẾ GIỚI') return 1;
+        if (a == 'CHÂU ÂU') return -1;
+        if (b == 'CHÂU ÂU') return 1;
+        return a.compareTo(b);
+      });
+
+    _selectedLeagues = widget.initiallySelected.isEmpty
+        ? List.from(_allLeagues)
+        : List.from(widget.initiallySelected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenH = MediaQuery.of(context).size.height;
+    return Container(
+      height: screenH * 0.75,
+      decoration: const BoxDecoration(
+        color: Color(0xFF0B0F16),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 4),
+            width: 40, height: 4,
+            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Row(
+              children: [
+                const Text('Chọn lọc giải đấu', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          const Divider(color: Colors.white10, height: 1),
+          // List
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: _sortedCountries.length,
+              itemBuilder: (context, index) {
+                final country = _sortedCountries[index];
+                final leagues = _countryGroups[country]!;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16, bottom: 8),
+                      child: Text(country, style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+                    ),
+                    ...leagues.map((league) {
+                      final isChecked = _selectedLeagues.contains(league);
+                      final count = _leagueCounts[league] ?? 0;
+                      return GestureDetector(
+                        onTap: () => setState(() {
+                          if (isChecked) _selectedLeagues.remove(league);
+                          else _selectedLeagues.add(league);
+                        }),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: isChecked ? const Color(0xFF1E2D4A) : const Color(0xFF1E2736),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: isChecked ? const Color(0xFF3B66F5).withOpacity(0.5) : Colors.transparent),
+                          ),
+                          child: Row(
+                            children: [
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                width: 20, height: 20,
+                                decoration: BoxDecoration(
+                                  color: isChecked ? const Color(0xFF3B66F5) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: isChecked ? const Color(0xFF3B66F5) : Colors.white38),
+                                ),
+                                child: isChecked ? const Icon(Icons.check, color: Colors.white, size: 14) : null,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text(league, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500))),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(10)),
+                                child: Text(count.toString(), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                );
+              },
+            ),
+          ),
+          // Bottom bar
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            decoration: const BoxDecoration(
+              color: Color(0xFF161F2C),
+              border: Border(top: BorderSide(color: Colors.white10)),
+            ),
+            child: SafeArea(
+              child: Row(
+                children: [
+                  TextButton(
+                    onPressed: () => setState(() => _selectedLeagues = List.from(_allLeagues)),
+                    child: const Text('Chọn tất cả', style: TextStyle(color: Colors.blueAccent, fontSize: 13)),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _selectedLeagues.clear()),
+                    child: const Text('Bỏ chọn tất cả', style: TextStyle(color: Colors.blueAccent, fontSize: 13)),
+                  ),
+                  const Spacer(),
+                  ElevatedButton(
+                    onPressed: () {
+                      // Nếu chọn tất cả → trả về rỗng = hiển thị tất cả
+                      final result = _selectedLeagues.length == _allLeagues.length
+                          ? <String>[]
+                          : List<String>.from(_selectedLeagues);
+                      widget.onConfirm(result);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(110, 44),
+                      backgroundColor: const Color(0xFF3B66F5),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                      elevation: 0,
+                    ),
+                    child: const Text('Xác nhận', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

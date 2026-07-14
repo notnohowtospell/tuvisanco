@@ -1,191 +1,263 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class MatchesService {
   private readonly logger = new Logger(MatchesService.name);
-  private readonly baseUrl = 'https://api.football-data.org/v4';
-  private readonly WC_TOKEN = '41d468be7af24f7d8c94b86cb73d30a6';
+  private readonly baseUrl = 'https://api.thestatsapi.com/api';
+  private apiKey: string;
+  private competitionCache = new Map<string, string>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  // Bảng tên giải đấu tĩnh cho các giải không có trong API plan
+  private readonly KNOWN_COMPETITIONS: Record<string, string> = {
+    'comp_6107': 'FIFA World Cup 2026',
+    'comp_3872': 'Club World Championship',
+    'comp_3498': 'UEFA Champions League',
+    'comp_3039': 'Premier League',
+    'comp_4643': 'Bundesliga',
+    'comp_5749': 'Copa América',
+    'comp_8649': 'CONCACAF Champions Cup',
+    'comp_5432': 'AFC Champions League',
+    'comp_7915': 'Copa del Rey',
+    'comp_5242': 'Copa do Brasil',
+    'comp_1554': 'Africa Cup of Nations',
+    'comp_023414': 'FIFA Intercontinental Cup',
+    'comp_9389': 'ASEAN Championship',
+  };
 
-  // TỰ ĐỘNG CẬP NHẬT: Cứ mỗi 1 phút sẽ tự động quét API để cập nhật tỉ số mới nhất
-  @Cron(CronExpression.EVERY_MINUTE)
+  // Map tên đội tuyển quốc gia sang mã ISO 2 chữ cái để lấy cờ
+  private readonly COUNTRY_CODE_MAP: Record<string, string> = {
+    'England': 'gb-eng', 'Argentina': 'ar', 'France': 'fr', 'Spain': 'es',
+    'Switzerland': 'ch', 'Norway': 'no', 'Belgium': 'be', 'Brazil': 'br',
+    'Germany': 'de', 'Portugal': 'pt', 'Italy': 'it', 'Netherlands': 'nl',
+    'Croatia': 'hr', 'Uruguay': 'uy', 'Colombia': 'co', 'USA': 'us',
+    'Mexico': 'mx', 'Japan': 'jp', 'Senegal': 'sn', 'Morocco': 'ma',
+    'South Korea': 'kr', 'Australia': 'au', 'Canada': 'ca', 'Poland': 'pl',
+    'Sweden': 'se', 'Denmark': 'dk', 'Chile': 'cl', 'Peru': 'pe',
+    'Ecuador': 'ec', 'Wales': 'gb-wls', 'Scotland': 'gb-sct', 'Ivory Coast': 'ci',
+    'Cameroon': 'cm', 'Ghana': 'gh', 'Nigeria': 'ng', 'Serbia': 'rs',
+    'Iran': 'ir', 'Saudi Arabia': 'sa', 'Qatar': 'qa', 'Venezuela': 've',
+    'Paraguay': 'py', 'Bolivia': 'bo', 'Vietnam': 'vn', 'Thailand': 'th',
+    'Indonesia': 'id', 'Malaysia': 'my', 'Türkiye': 'tr', 'Ukraine': 'ua',
+    'Austria': 'at', 'Hungary': 'hu', 'Czech Republic': 'cz', 'Romania': 'ro',
+  };
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+    private readonly httpService: HttpService,
+  ) {
+    this.apiKey = this.configService.get<string>('THE_STATS_API_KEY') || '';
+  }
+
+  // Helper function to call TheStatsAPI
+  private async callApi(endpoint: string) {
+    try {
+      const url = `${this.baseUrl}${endpoint}`;
+      const response = await firstValueFrom(
+        this.httpService.get(url, {
+          headers: { Authorization: `Bearer ${this.apiKey}` },
+          timeout: 10000,
+        })
+      );
+      return response.data;
+    } catch (error: any) {
+      const status = error.response?.status;
+      // Tránh in lỗi 404 đỏ cho các endpoint Lineups/Stats khi trận chưa diễn ra
+      if (status !== 404) {
+        this.logger.warn(`API Warning calling ${endpoint}: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  // Tạo URL avatar chữ cái tự động cho các đội không có logo
+  private generateAvatarUrl(name: string): string {
+    // Nếu tên là quốc gia, trả về cờ thực từ FlagCDN
+    if (this.COUNTRY_CODE_MAP[name]) {
+      return `https://flagcdn.com/w160/${this.COUNTRY_CODE_MAP[name]}.png`;
+    }
+    const encodedName = encodeURIComponent(name);
+    return `https://ui-avatars.com/api/?name=${encodedName}&background=random&color=fff&size=200`;
+  }
+
+  // Load danh sách giải đấu để lấy Tên giải đấu từ competition_id
+  private async loadCompetitions() {
+    if (this.competitionCache.size === 0) {
+      try {
+        const data = await this.callApi('/football/competitions');
+        if (data && data.data) {
+          for (const comp of data.data) {
+            this.competitionCache.set(comp.id, comp.name);
+          }
+        }
+      } catch (e) {
+        this.logger.warn('Could not load competitions cache');
+      }
+    }
+  }
+
+  // TỰ ĐỘNG CẬP NHẬT: Cứ mỗi 30 phút quét dữ liệu 1 lần
+  @Cron(CronExpression.EVERY_30_MINUTES)
   async handleCron() {
-    this.logger.log('🔄 Đang tự động cập nhật Thiên Cơ (Tỉ số World Cup)...');
+    this.logger.log('🔄 Đang tự động cập nhật Dữ liệu Trận Đấu từ TheStatsAPI...');
     await this.syncDailyFixtures();
   }
 
   async syncDailyFixtures() {
     try {
-      this.logger.log('🏆 Đang truy quét Thiên Cơ từ toàn bộ các giải đấu trong 10 ngày...');
+      this.logger.log('🏆 Bắt đầu quét TheStatsAPI cho các trận đấu (3 ngày trước đến 7 ngày tới)...');
+      await this.loadCompetitions();
 
       const today = new Date();
-      const past = new Date(today); past.setDate(past.getDate() - 5);
-      const future = new Date(today); future.setDate(future.getDate() + 5);
+      const past = new Date(today); past.setDate(past.getDate() - 3);
+      const future = new Date(today); future.setDate(future.getDate() + 7);
       
       const dateFrom = past.toISOString().split('T')[0];
       const dateTo = future.toISOString().split('T')[0];
 
-      const response = await fetch(`${this.baseUrl}/matches?dateFrom=${dateFrom}&dateTo=${dateTo}`, {
-        headers: { 'X-Auth-Token': this.WC_TOKEN },
-      });
+      // Danh sách các giải đấu quan trọng cần sync riêng
+      const TOP_COMPETITIONS = [
+        'comp_6107',  // FIFA World Cup
+        'comp_3872',  // Club World Championship
+        'comp_3498',  // UEFA Champions League
+        'comp_3039',  // Premier League
+        'comp_4643',  // Bundesliga
+        'comp_4795',  // Brasileirão Série A
+        'comp_5749',  // Copa América
+        'comp_8649',  // CONCACAF Champions Cup
+        'comp_5432',  // AFC Champions League
+      ];
 
-      if (!response.ok) throw new Error('API Error');
+      let allMatches: any[] = [];
 
-      const data = await response.json();
-      const wcMatches = data.matches || [];
+      // 1. Lấy tất cả trận trong khoảng thời gian (bao gồm cả các giải khác)
+      try {
+        const data = await this.callApi(`/football/matches?date_from=${dateFrom}&date_to=${dateTo}`);
+        if (data?.data) allMatches.push(...data.data);
+      } catch(e) { this.logger.warn('General fetch failed, continuing with specific competitions...'); }
 
-      for (const m of wcMatches) {
-        // 1. Xử lý trạng thái
+      // 2. Lấy riêng từng giải đấu top để đảm bảo không bị bỏ sót
+      for (const compId of TOP_COMPETITIONS) {
+        try {
+          const data = await this.callApi(`/football/matches?competition_id=${compId}&date_from=${dateFrom}&date_to=${dateTo}`);
+          if (data?.data && data.data.length > 0) {
+            allMatches.push(...data.data);
+            const compName = this.competitionCache.get(compId) || compId;
+            this.logger.log(`  ✅ ${compName}: ${data.data.length} trận`);
+          }
+        } catch(e) { /* ignore missing comps */ }
+      }
+
+      // Loại bỏ trùng lặp theo ID
+      const uniqueMap = new Map<string, any>();
+      for (const m of allMatches) {
+        uniqueMap.set(m.id, m);
+      }
+      const matches = Array.from(uniqueMap.values());
+
+      let syncedCount = 0;
+
+      for (const m of matches) {
         let status: 'NS' | 'LIVE' | 'FT' | 'CANCL' = 'NS';
-        if (['IN_PLAY', 'PAUSED'].includes(m.status)) status = 'LIVE';
-        else if (['FINISHED'].includes(m.status)) status = 'FT';
+        if (m.status === 'in_play') status = 'LIVE';
+        else if (m.status === 'finished') status = 'FT';
+        else if (m.status === 'postponed' || m.status === 'cancelled') status = 'CANCL';
 
-        // 2. Xử lý tên đội và Ảnh (Crest)
-        const homeName = m.homeTeam?.shortName || m.homeTeam?.name || 'Chờ xác định';
-        const awayName = m.awayTeam?.shortName || m.awayTeam?.name || 'Chờ xác định';
-        const homeLogo = m.homeTeam?.crest || null;
-        const awayLogo = m.awayTeam?.crest || null;
+        let homeName = m.home_team?.name || 'Unknown Home';
+        let awayName = m.away_team?.name || 'Unknown Away';
 
-        // 3. Xử lý sân vận động và trọng tài
-        const stadiums = ['MetLife Stadium', 'AT&T Stadium', 'SoFi Stadium', 'Levi\'s Stadium', 'Hard Rock Stadium'];
-        const referees = ['Daniele Orsato', 'Szymon Marciniak', 'Anthony Taylor', 'Wilton Sampaio', 'Michael Oliver'];
-        const stadium = m.venue?.name || stadiums[Math.floor(Math.random() * stadiums.length)];
-        const referee = m.referees && m.referees.length > 0 ? m.referees[0].name : referees[Math.floor(Math.random() * referees.length)];
+        // Đổi tên các đội chưa xác định (VD: W101, L102 trong vòng knock-out)
+        if (/^[WL]\d+$/.test(homeName) || homeName === 'TBA' || homeName === 'TBD') {
+          homeName = 'Chưa xác định';
+        }
+        if (/^[WL]\d+$/.test(awayName) || awayName === 'TBA' || awayName === 'TBD') {
+          awayName = 'Chưa xác định';
+        }
+        const homeLogo = this.generateAvatarUrl(homeName);
+        const awayLogo = this.generateAvatarUrl(awayName);
 
-        // 4. Mock lịch sử đối đầu (H2H)
+        // Map tên giải đấu: ưu tiên bảng tĩnh → cache từ API → tên trực tiếp → mặc định
+        const leagueName = this.KNOWN_COMPETITIONS[m.competition_id]
+          || this.competitionCache.get(m.competition_id)
+          || m.competition?.name
+          || 'Quốc tế';
+
         const h2hHistory = [
           {
             date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-            homeTeam: homeName,
-            awayTeam: awayName,
-            homeScore: Math.floor(Math.random() * 4),
-            awayScore: Math.floor(Math.random() * 4),
+            homeTeam: homeName, awayTeam: awayName,
+            homeScore: Math.floor(Math.random() * 4), awayScore: Math.floor(Math.random() * 4),
           },
           {
             date: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
-            homeTeam: awayName,
-            awayTeam: homeName,
-            homeScore: Math.floor(Math.random() * 4),
-            awayScore: Math.floor(Math.random() * 4),
+            homeTeam: awayName, awayTeam: homeName,
+            homeScore: Math.floor(Math.random() * 4), awayScore: Math.floor(Math.random() * 4),
           },
           {
             date: new Date(Date.now() - 700 * 24 * 60 * 60 * 1000).toISOString(),
-            homeTeam: homeName,
-            awayTeam: awayName,
-            homeScore: Math.floor(Math.random() * 4),
-            awayScore: Math.floor(Math.random() * 4),
+            homeTeam: homeName, awayTeam: awayName,
+            homeScore: Math.floor(Math.random() * 4), awayScore: Math.floor(Math.random() * 4),
           }
         ];
 
-        const leagueName = m.competition?.name || 'Quốc tế';
+        const homeScore = m.score?.regulation?.home ?? m.score?.home ?? 0;
+        const awayScore = m.score?.regulation?.away ?? m.score?.away ?? 0;
 
         await this.prisma.match.upsert({
           where: { apiFootballId: m.id },
           update: {
             status,
-            homeScore: m.score?.fullTime?.home ?? 0,
-            awayScore: m.score?.fullTime?.away ?? 0,
-            minuteElapsed: status === 'LIVE' ? 45 : 0,
-            homeLogo: homeLogo,
-            awayLogo: awayLogo,
-            stadium,
-            referee,
-            h2hHistory,
+            homeScore,
+            awayScore,
+            leagueName, // Cập nhật tên giải đấu nếu trước đó là "Quốc tế"
+            homeLogo, // Cập nhật cờ mới nếu có
+            awayLogo,
+            minuteElapsed: status === 'LIVE' ? 45 : (status === 'FT' ? 90 : 0),
+            h2hHistory: h2hHistory,
           },
           create: {
             apiFootballId: m.id,
-            leagueName: leagueName,
+            leagueName,
             homeTeam: homeName,
-            homeLogo: homeLogo,
+            homeLogo,
             awayTeam: awayName,
-            awayLogo: awayLogo,
-            startTime: new Date(m.utcDate),
+            awayLogo,
+            startTime: new Date(m.utc_date),
             status,
-            homeScore: m.score?.fullTime?.home ?? 0,
-            awayScore: m.score?.fullTime?.away ?? 0,
-            // Mock stats cho đẹp UI như ảnh
-            homeShots: Math.floor(Math.random() * 10) + 5,
-            awayShots: Math.floor(Math.random() * 10) + 5,
-            homeYellowCards: Math.floor(Math.random() * 3),
-            awayYellowCards: Math.floor(Math.random() * 3),
-            stadium,
-            referee,
-            h2hHistory,
+            homeScore,
+            awayScore,
+            stadium: m.venue?.name || 'TBA',
+            h2hHistory: h2hHistory,
           },
         });
+        syncedCount++;
       }
-      // --- BẮT ĐẦU MOCK DỮ LIỆU ---
-      const TOP_13_LEAGUES = [
-        "FIFA World Cup", "UEFA Champions League", "Premier League", "Primera Division",
-        "Serie A", "Bundesliga", "Ligue 1", "Championship", "Eredivisie",
-        "Primeira Liga", "Campeonato Brasileiro Série A", "Copa Libertadores", "DFB Pokal"
-      ];
 
-      const existingLeagues = new Set(wcMatches.map((m: any) => m.competition?.name));
-      const missingLeagues = TOP_13_LEAGUES.filter(l => !existingLeagues.has(l));
-
-      for (const league of missingLeagues) {
-        const mockCount = Math.floor(Math.random() * 3) + 2; // 2 to 4 matches
-        for (let i = 0; i < mockCount; i++) {
-          const mockId = 9000000 + TOP_13_LEAGUES.indexOf(league) * 10 + i;
-          const statusOptions: ('NS' | 'LIVE' | 'FT')[] = ['NS', 'LIVE', 'FT'];
-          const status = statusOptions[Math.floor(Math.random() * statusOptions.length)];
-          const homeScore = Math.floor(Math.random() * 4);
-          const awayScore = Math.floor(Math.random() * 4);
-
-          await this.prisma.match.upsert({
-            where: { apiFootballId: mockId },
-            update: {
-              status,
-              homeScore,
-              awayScore,
-              minuteElapsed: status === 'LIVE' ? 45 : 0,
-            },
-            create: {
-              apiFootballId: mockId,
-              leagueName: league,
-              homeTeam: `Đội nhà ${league} ${i+1}`,
-              homeLogo: 'https://crests.football-data.org/769.svg',
-              awayTeam: `Đội khách ${league} ${i+1}`,
-              awayLogo: 'https://crests.football-data.org/774.svg',
-              startTime: new Date(Date.now() + (Math.random() - 0.5) * 24 * 60 * 60 * 1000),
-              status,
-              homeScore,
-              awayScore,
-              homeShots: Math.floor(Math.random() * 10) + 5,
-              awayShots: Math.floor(Math.random() * 10) + 5,
-              homeYellowCards: Math.floor(Math.random() * 3),
-              awayYellowCards: Math.floor(Math.random() * 3),
-              stadium: "Sân vận động Mock",
-              referee: "Trọng tài Mock",
-              h2hHistory: []
-            }
-          });
-        }
-      }
-      // --- KẾT THÚC MOCK DỮ LIỆU ---
-
-      this.logger.log('🚀 Đã đồng bộ thành công dữ liệu thật và giả lập 13 giải!');
+      this.logger.log(`🚀 Đã đồng bộ thành công ${syncedCount} trận đấu từ TheStatsAPI (bao gồm World Cup)!`);
     } catch (e) {
       this.logger.error('❌ Sync failed:', e);
     }
   }
 
+
   async getMatches(date?: string) {
     let whereCondition: any = {};
 
     if (date) {
-      // Lọc từ 00:00:00 đến 23:59:59 của ngày được chọn
-      const startOfDay = new Date(`${date}T00:00:00.000Z`);
-      const endOfDay = new Date(`${date}T23:59:59.999Z`);
+      // Bù múi giờ Việt Nam +7: Lấy toàn bộ ngày theo giờ VN (UTC+7)
+      const startOfDay = new Date(`${date}T00:00:00.000+07:00`);
+      const endOfDay   = new Date(`${date}T23:59:59.999+07:00`);
       whereCondition.startTime = { gte: startOfDay, lte: endOfDay };
     } else {
-      // Mặc định: Lấy các trận từ 24 tiếng trước trở đi
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      whereCondition.startTime = { gte: oneDayAgo };
+      // Mặc định: hiển thị trận từ hôm nay
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      whereCondition.startTime = { gte: todayStart };
     }
 
     let matches = await this.prisma.match.findMany({
@@ -193,13 +265,17 @@ export class MatchesService {
       orderBy: { startTime: 'asc' },
     });
 
-    // Chỉ tự động sync nếu không truyền date (hoặc date là hôm nay), để tránh spam sync khi xem các ngày không có trận
-    if (matches.length === 0 && !date) {
-      this.logger.log('📡 Đang đồng bộ Thiên Cơ từ API...');
+    // Nếu không có trận trong ngày được chọn, lấy trận gần nhất trong DB
+    if (matches.length === 0) {
+      this.logger.log('📡 Không có trận trong ngày này, đang tìm trận gần nhất...');
+      
+      // Thử sync mới trước
       await this.syncDailyFixtures();
+      
+      // Nếu vẫn không có, lấy 30 trận gần nhất sắp diễn ra
       matches = await this.prisma.match.findMany({
-        where: whereCondition,
         orderBy: { startTime: 'asc' },
+        take: 50,
       });
     }
 
@@ -207,6 +283,66 @@ export class MatchesService {
   }
 
   async getMatchDetail(id: string) {
-    return this.prisma.match.findUnique({ where: { id } });
+    // 1. Lấy dữ liệu cơ bản từ Database
+    const dbMatch = await this.prisma.match.findUnique({ where: { id } });
+    if (!dbMatch) throw new NotFoundException('Match not found in DB');
+
+    // 2. Fetch dữ liệu chuyên sâu (Lineups, Stats, Match Details) on-demand
+    try {
+      const detail = await this.callApi(`/football/matches/${dbMatch.apiFootballId}`);
+      if (detail && detail.data) {
+        dbMatch.stadium = detail.data.venue?.name || dbMatch.stadium;
+        dbMatch.referee = detail.data.referee || dbMatch.referee;
+      }
+    } catch(e) { /* ignore */ }
+
+    try {
+      const statsResponse = await this.callApi(`/football/matches/${dbMatch.apiFootballId}/stats`);
+      if (statsResponse && statsResponse.data) {
+        const stats = statsResponse.data;
+        const homeShots = stats.shots_on_target?.all?.home ?? stats.shots?.all?.home ?? 0;
+        const awayShots = stats.shots_on_target?.all?.away ?? stats.shots?.all?.away ?? 0;
+        const homeYellowCards = stats.yellow_cards?.all?.home ?? 0;
+        const awayYellowCards = stats.yellow_cards?.all?.away ?? 0;
+        const homeRedCards = stats.red_cards?.all?.home ?? 0;
+        const awayRedCards = stats.red_cards?.all?.away ?? 0;
+
+        dbMatch.homeShots = homeShots;
+        dbMatch.awayShots = awayShots;
+        dbMatch.homeYellowCards = homeYellowCards;
+        dbMatch.awayYellowCards = awayYellowCards;
+        dbMatch.homeRedCards = homeRedCards;
+        dbMatch.awayRedCards = awayRedCards;
+        dbMatch.teamStats = stats as any; // Cache lại nguyên mảng stat JSON (xG, fouls...)
+      }
+    } catch(e) { /* ignore 404 nếu trận chưa đá */ }
+
+    try {
+      const lineupsResponse = await this.callApi(`/football/matches/${dbMatch.apiFootballId}/lineups`);
+      if (lineupsResponse && lineupsResponse.data) {
+        dbMatch.lineupHome = lineupsResponse.data.home as any;
+        dbMatch.lineupAway = lineupsResponse.data.away as any;
+      }
+    } catch(e) { /* ignore 404 */ }
+
+    // 3. Cập nhật các thông tin mới lấy được vào DB để Cache cho lần sau
+    await this.prisma.match.update({
+      where: { id },
+      data: {
+        stadium: dbMatch.stadium,
+        referee: dbMatch.referee,
+        homeShots: dbMatch.homeShots,
+        awayShots: dbMatch.awayShots,
+        homeYellowCards: dbMatch.homeYellowCards,
+        awayYellowCards: dbMatch.awayYellowCards,
+        homeRedCards: dbMatch.homeRedCards,
+        awayRedCards: dbMatch.awayRedCards,
+        teamStats: dbMatch.teamStats ? (dbMatch.teamStats as any) : undefined,
+        lineupHome: dbMatch.lineupHome ? (dbMatch.lineupHome as any) : undefined,
+        lineupAway: dbMatch.lineupAway ? (dbMatch.lineupAway as any) : undefined,
+      }
+    });
+
+    return dbMatch;
   }
 }
