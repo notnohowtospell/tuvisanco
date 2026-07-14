@@ -61,7 +61,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> with SingleTicker
       return Icon(Icons.shield, color: fallbackColor, size: size);
     }
     final originalUrl = url.trim();
-    final proxiedUrl = 'http://192.168.100.32:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
+    final proxiedUrl = 'http://10.0.2.2:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
     
     return ClipRRect(
       borderRadius: BorderRadius.circular(size / 8),
@@ -462,7 +462,86 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> with SingleTicker
   }
 
   Widget _buildLineupTab(MatchModel match) {
-    return const Center(child: Text('Đang cập nhật đội hình...', style: TextStyle(color: Colors.white54)));
+    if (match.lineupHome == null || match.lineupAway == null) {
+      return const Center(child: Text('Chưa có dữ liệu đội hình cho trận đấu này.', style: TextStyle(color: Colors.white54)));
+    }
+
+    final homeXi = match.lineupHome!['starting_xi'] as List<dynamic>? ?? [];
+    final awayXi = match.lineupAway!['starting_xi'] as List<dynamic>? ?? [];
+
+    if (homeXi.isEmpty && awayXi.isEmpty) {
+      return const Center(child: Text('Đội hình xuất phát chưa được công bố.', style: TextStyle(color: Colors.white54)));
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: homeXi.length,
+            itemBuilder: (context, i) {
+              final player = homeXi[i];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: Colors.blueAccent.withOpacity(0.2),
+                      child: Text('${player['jersey_number'] ?? '-'}', style: const TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(player['name'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(player['position'] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        Container(width: 1, color: Colors.white12),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: awayXi.length,
+            itemBuilder: (context, i) {
+              final player = awayXi[i];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(player['name'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(player['position'] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: Colors.redAccent.withOpacity(0.2),
+                      child: Text('${player['jersey_number'] ?? '-'}', style: const TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildH2HTab(MatchModel match) {
