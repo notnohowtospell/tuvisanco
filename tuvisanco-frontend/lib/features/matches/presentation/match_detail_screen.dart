@@ -61,7 +61,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> with SingleTicker
       return Icon(Icons.shield, color: fallbackColor, size: size);
     }
     final originalUrl = url.trim();
-    final proxiedUrl = 'http://127.0.0.1:3005/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
+    final proxiedUrl = 'http://10.0.2.2:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
     
     return ClipRRect(
       borderRadius: BorderRadius.circular(size / 8),
