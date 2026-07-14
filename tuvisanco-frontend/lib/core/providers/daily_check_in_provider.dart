@@ -60,7 +60,7 @@ class CheckInState {
 
 class DailyCheckInNotifier extends Notifier<CheckInState> {
   final Dio _dio = Dio(BaseOptions(
-    baseUrl: "http://10.0.2.2:3000/users",
+    baseUrl: "http://192.168.100.32:3000/users",
     connectTimeout: const Duration(seconds: 5),
     receiveTimeout: const Duration(seconds: 5),
   ));

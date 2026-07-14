@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../chat/presentation/chat_screen.dart';
 import '../data/match_model.dart';
-import 'league_filter_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -17,9 +16,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _selectedTab = 'Tất cả';
-  DateTime _selectedDate = DateTime.now();
   Future<List<MatchModel>>? _matchesFuture;
-  List<String> _selectedLeagues = [];
 
   @override
   void initState() {
@@ -29,8 +26,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<List<MatchModel>> _fetchMatches() async {
     try {
-      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final response = await dioClient.get('/matches?date=$dateStr');
+      final response = await dioClient.get('/matches');
       if (response.statusCode == 200) {
         List<dynamic> data = response.data;
         return data.map((json) => MatchModel.fromJson(json)).toList();
@@ -43,30 +39,58 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFF0B0F16),
       appBar: _buildAppBar(),
+      floatingActionButton: GestureDetector(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatScreen())),
+        child: Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFF3B66F5), width: 2),
+            boxShadow: [
+              BoxShadow(color: const Color(0xFF3B66F5).withOpacity(0.3), blurRadius: 15, spreadRadius: 2),
+            ],
+            image: const DecorationImage(
+              image: AssetImage('assets/images/ChatBox.png'),
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+      ),
       body: RefreshIndicator(
         onRefresh: () async => setState(() { _matchesFuture = _fetchMatches(); }),
-        child: Column(
-          children: [
-            _buildTabs(),
-            Expanded(
-              child: FutureBuilder<List<MatchModel>>(
-                future: _matchesFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator(color: Colors.blueAccent));
-                  }
-                  final matches = snapshot.data ?? [];
-                  if (matches.isEmpty) {
-                    return const Center(child: Text('Không có trận đấu nào.', style: TextStyle(color: Colors.white38)));
-                  }
-                  return _buildLeagueGroups(matches);
-                },
+        child: FutureBuilder<List<MatchModel>>(
+          future: _matchesFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Padding(
+                padding: EdgeInsets.all(40),
+                child: Center(child: CircularProgressIndicator(color: Colors.blueAccent)),
+              );
+            }
+            final matches = snapshot.data ?? [];
+            
+            return SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTabs(),
+                  _buildBanner(authState.username ?? 'Đạo hữu'),
+                  
+                  _buildSectionHeader('✨ Đại Trận Tiêu Điểm', showSeeAll: true),
+                  _buildFeaturedSection(matches),
+
+                  _buildMatchGroups(matches),
+                  const SizedBox(height: 50),
+                ],
               ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -74,375 +98,338 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: const Color(0xFF1B2342),
+      backgroundColor: const Color(0xFF161F2C),
       elevation: 0,
       leading: Padding(
         padding: const EdgeInsets.all(10.0),
-        child: Image.asset('assets/images/Logo.png', errorBuilder: (c, e, s) => const Icon(Icons.sports_soccer, color: Colors.blueAccent)),
+        child: Image.asset('assets/images/Logo.png', errorBuilder: (c, e, s) => const Icon(Icons.stars, color: Colors.blueAccent)),
       ),
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: const [
-          Text('BÓNG ĐÁ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-          SizedBox(width: 4),
-          Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 20),
-        ],
-      ),
-      centerTitle: false,
+      title: const Text('Tử Vi Sân Cỏ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
       actions: [
-        IconButton(icon: const Icon(Icons.filter_alt_outlined, color: Colors.white), onPressed: _showLeagueFilter),
-        IconButton(icon: const Icon(Icons.search, color: Colors.white), onPressed: () {}),
-        IconButton(icon: const Icon(Icons.star_border, color: Colors.white), onPressed: () {}),
+        IconButton(
+          icon: const Icon(Icons.sync, color: Colors.blueAccent),
+          tooltip: 'Lấy Thiên Cơ',
+          onPressed: () async {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đang đồng bộ từ World Cup...')));
+            try {
+              await dioClient.post('/matches/sync');
+              setState(() { _matchesFuture = _fetchMatches(); });
+            } catch (e) {
+              debugPrint('Sync failed: $e');
+            }
+          },
+        ),
+        IconButton(icon: const Icon(Icons.notifications_none, color: Colors.white70), onPressed: () {}),
       ],
     );
-  }
-
-  void _showLeagueFilter() async {
-    final matches = await _matchesFuture;
-    if (matches == null || matches.isEmpty) return;
-
-    if (!mounted) return;
-
-    final selected = await Navigator.push<List<String>>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => LeagueFilterScreen(
-          matches: matches,
-          initiallySelected: _selectedLeagues,
-        ),
-      ),
-    );
-
-    if (selected != null && mounted) {
-      setState(() {
-        _selectedLeagues = selected;
-      });
-    }
   }
 
   Widget _buildTabs() {
-    final tabs = ['Tất cả', '● Live', 'Đã kết thúc', 'Sắp diễn ra'];
+    final tabs = ['Tất cả', '● Live', 'Kết thúc', 'Sắp diễn ra'];
+    return SizedBox(
+      height: 54,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        itemCount: tabs.length + 1,
+        itemBuilder: (context, index) {
+          if (index == tabs.length) return _buildIconBtn(Icons.calendar_month);
+          final tab = tabs[index];
+          bool isSelected = _selectedTab == tab.replaceAll('● ', '');
+          return GestureDetector(
+            onTap: () => setState(() => _selectedTab = tab.replaceAll('● ', '')),
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFF3B66F5).withOpacity(0.15) : const Color(0xFF1E2736),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: isSelected ? const Color(0xFF3B66F5) : Colors.transparent),
+              ),
+              child: Center(child: Text(tab, style: TextStyle(color: isSelected ? Colors.white : Colors.white60, fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal))),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildIconBtn(IconData icon) {
     return Container(
-      color: const Color(0xFF0B0F16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: const Color(0xFF1E2736), borderRadius: BorderRadius.circular(8)),
+      child: Icon(icon, color: Colors.white70, size: 18),
+    );
+  }
+
+  Widget _buildBanner(String name) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: const Color(0xFF161F2C), borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: tabs.map((tab) {
-                  bool isSelected = _selectedTab == tab.replaceAll('● ', '');
-                  bool isLive = tab.contains('Live');
-                  return GestureDetector(
-                    onTap: () => setState(() => _selectedTab = tab.replaceAll('● ', '')),
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFF3B66F5) : const Color(0xFF1E2736),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          if (isLive) ...[
-                            const Icon(Icons.play_circle_fill, color: Colors.redAccent, size: 14),
-                            const SizedBox(width: 4),
-                          ],
-                          Text(
-                            tab.replaceAll('● ', ''),
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.white70,
-                              fontSize: 13,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('THIÊN CƠ HIỆN HỮU', style: TextStyle(color: Color(0xFF4A5664), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                const SizedBox(height: 8),
+                Text('Chào $name,\nxem quẻ hôm nay?', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, height: 1.2)),
+                const SizedBox(height: 12),
+                _badge('🔮 Vận may: 88%'),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          _buildIconButton(Icons.calendar_month, () async {
-            final date = await showDatePicker(
-              context: context,
-              initialDate: _selectedDate,
-              firstDate: DateTime(2020),
-              lastDate: DateTime(2030),
-            );
-            if (date != null) {
-              setState(() {
-                _selectedDate = date;
-                _matchesFuture = _fetchMatches();
-              });
-            }
-          }),
-          const SizedBox(width: 8),
-          _buildIconButton(Icons.menu, () {}),
+          const Opacity(opacity: 0.1, child: Icon(Icons.explore, color: Colors.white, size: 70)),
         ],
       ),
     );
   }
 
-  Widget _buildIconButton(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(color: const Color(0xFF1E2736), borderRadius: BorderRadius.circular(6)),
-        child: Icon(icon, color: Colors.white70, size: 18),
+  Widget _badge(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(20)),
+      child: Text(text, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+    );
+  }
+
+  Widget _buildFeaturedSection(List<MatchModel> matches) {
+    final featured = matches.where((m) => m.status == 'NS' || m.status == 'LIVE').toList();
+
+    if (featured.isEmpty) return const SizedBox();
+    return SizedBox(
+      height: 220,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: featured.length > 8 ? 8 : featured.length,
+        itemBuilder: (context, index) => _buildFeaturedCard(featured[index]),
       ),
     );
   }
 
-  Widget _buildLeagueGroups(List<MatchModel> matches) {
-    List<MatchModel> filtered = matches;
-    if (_selectedTab == 'Live') filtered = matches.where((m) => m.status == 'LIVE').toList();
-    if (_selectedTab == 'Đã kết thúc') filtered = matches.where((m) => m.status == 'FT').toList();
-    if (_selectedTab == 'Sắp diễn ra') filtered = matches.where((m) => m.status == 'NS').toList();
-
-    if (filtered.isEmpty) {
-      return const Center(child: Text('Không có trận đấu nào.', style: TextStyle(color: Colors.white38)));
-    }
-
-    // Group by league
-    Map<String, List<MatchModel>> groups = {};
-    for (var m in filtered) {
-      if (_selectedLeagues.isNotEmpty && !_selectedLeagues.contains(m.leagueName)) {
-        continue;
-      }
-      if (!groups.containsKey(m.leagueName)) {
-        groups[m.leagueName] = [];
-      }
-      groups[m.leagueName]!.add(m);
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-      itemCount: groups.keys.length,
-      itemBuilder: (context, index) {
-        String league = groups.keys.elementAt(index);
-        List<MatchModel> leagueMatches = groups[league]!;
-        
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF161F2C),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _buildFeaturedCard(MatchModel match) {
+    return Container(
+      width: 290,
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: const Color(0xFF161F2C), borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // League Header
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1B2342),
-                  borderRadius: BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.public, color: Colors.greenAccent, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(league, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))),
-                    const Icon(Icons.people, color: Colors.white38, size: 14),
-                    const SizedBox(width: 4),
-                    const Text('9999+', style: TextStyle(color: Colors.white38, fontSize: 12)),
-                  ],
-                ),
-              ),
-              
-              // Matches in League
-              ...leagueMatches.asMap().entries.map((entry) {
-                int idx = entry.key;
-                MatchModel m = entry.value;
-                return Column(
-                  children: [
-                    if (idx > 0) const Divider(color: Colors.white10, height: 1, indent: 16, endIndent: 16),
-                    _buildMatchCard(m),
-                  ],
-                );
-              }),
+              _leagueBadge(match.leagueName),
+              if (match.status == 'LIVE') _liveLabel(match.minuteElapsed),
+              if (match.status == 'NS') Text(DateFormat('HH:mm').format(match.startTime), style: const TextStyle(color: Colors.white38, fontSize: 10)),
             ],
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildMatchCard(MatchModel match) {
-    bool isNS = match.status == 'NS';
-    bool isLive = match.status == 'LIVE';
-    
-    // Mock half-time score based on full time score
-    int h1Home = (match.homeScore / 2).ceil();
-    int h1Away = (match.awayScore / 2).ceil();
-    
-    return InkWell(
-      onTap: () => context.push('/match/detail/${match.id}'),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                // Left Column: Time & Status
-                SizedBox(
-                  width: 70,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.star_border, color: Colors.white38, size: 20),
-                      const SizedBox(height: 8),
-                      Text(DateFormat('HH:mm').format(match.startTime), style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                      const SizedBox(height: 4),
-                      Text(
-                        isLive ? "${match.minuteElapsed}'" : (isNS ? "Chưa đá" : "Đã kết thúc"),
-                        style: TextStyle(color: isLive || !isNS ? Colors.greenAccent : Colors.white38, fontSize: 11, fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(width: 12),
-                
-                // Middle Column: Teams
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          _teamLogo(match.homeLogo, Colors.blueAccent, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(match.homeTeam, style: const TextStyle(color: Colors.white, fontSize: 15), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          _teamLogo(match.awayLogo, Colors.redAccent, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(match.awayTeam, style: const TextStyle(color: Colors.white, fontSize: 15), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                
-                // Right Column: Scores
-                SizedBox(
-                  width: 30,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(isNS ? '-' : '${match.homeScore}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 16),
-                      Text(isNS ? '-' : '${match.awayScore}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Bottom Stats Row
-            Row(
-              children: [
-                // Home Stats
-                _statItem(Icons.flag, '${match.homeShots}', Colors.grey),
-                const SizedBox(width: 8),
-                _statItem(Icons.rectangle, '${match.homeRedCards}', Colors.red),
-                const SizedBox(width: 8),
-                _statItem(Icons.rectangle, '${match.homeYellowCards}', Colors.amber),
-                
-                const Spacer(),
-                
-                // Middle Icons
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: const Color(0xFF3B66F5), borderRadius: BorderRadius.circular(4)),
-                  child: const Text('3D', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: const Color(0xFF3B66F5), borderRadius: BorderRadius.circular(4)),
-                  child: const Icon(Icons.tv, color: Colors.white, size: 10),
-                ),
-                
-                const Spacer(),
-                
-                // Away Stats
-                _statItem(Icons.rectangle, '${match.awayYellowCards}', Colors.amber),
-                const SizedBox(width: 8),
-                _statItem(Icons.rectangle, '${match.awayRedCards}', Colors.red),
-                const SizedBox(width: 8),
-                _statItem(Icons.flag, '${match.awayShots}', Colors.grey),
-              ],
-            ),
-            
-            const SizedBox(height: 12),
-            
-            // Half Time Score Highlight
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.redAccent.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                isNS ? 'Chưa có thông tin' : "H1 ($h1Home-$h1Away), 90' (${match.homeScore}-${match.awayScore})",
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 11),
-              ),
-            ),
-          ],
-        ),
+          const SizedBox(height: 18),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _teamView(match.homeTeam, match.homeLogo, Colors.blueAccent),
+              _scoreView(match),
+              _teamView(match.awayTeam, match.awayLogo, Colors.redAccent),
+            ],
+          ),
+          const Spacer(),
+          _statsRow(match),
+          const SizedBox(height: 12),
+          _actionBtn(),
+        ],
       ),
     );
   }
 
-  Widget _statItem(IconData icon, String value, Color iconColor) {
+  Widget _leagueBadge(String name) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(color: const Color(0xFF3B66F5).withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+      child: Text(name.toUpperCase(), style: const TextStyle(color: Color(0xFF3B66F5), fontSize: 9, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _liveLabel(int min) {
     return Row(
       children: [
-        Icon(icon, size: 10, color: iconColor),
-        const SizedBox(width: 2),
-        Text(value, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+        const Icon(Icons.sensors, color: Colors.redAccent, size: 12),
+        const SizedBox(width: 4),
+        const Text('LIVE', style: TextStyle(color: Colors.redAccent, fontSize: 9, fontWeight: FontWeight.bold)),
+        const SizedBox(width: 6),
+        Text('Phút $min\'', style: const TextStyle(color: Colors.white38, fontSize: 9)),
       ],
     );
   }
 
-  Widget _teamLogo(String? url, Color fallbackColor, {double size = 18}) {
+  Widget _teamView(String name, String? logoUrl, Color color) {
+    return SizedBox(
+      width: 80,
+      child: Column(
+        children: [
+          _teamLogo(logoUrl, color, size: 34),
+          const SizedBox(height: 8),
+          Text(name, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _teamLogo(String? url, Color fallbackColor, {double size = 30}) {
     if (url == null || url.isEmpty) {
       return Icon(Icons.shield, color: fallbackColor, size: size);
     }
-    final originalUrl = url.trim();
-    final proxiedUrl = 'http://10.0.2.2:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
     
+    final cleanUrl = url.trim();
+
     return ClipRRect(
-      borderRadius: BorderRadius.circular(2),
-      child: originalUrl.toLowerCase().endsWith('.svg')
+      borderRadius: BorderRadius.circular(size / 4),
+      child: cleanUrl.toLowerCase().contains('.svg')
           ? SvgPicture.network(
-              proxiedUrl,
+              cleanUrl,
               width: size,
               height: size,
               fit: BoxFit.contain,
-              placeholderBuilder: (_) => Icon(Icons.shield, color: fallbackColor, size: size),
+              placeholderBuilder: (context) => Icon(Icons.shield, color: fallbackColor, size: size),
             )
           : Image.network(
-              proxiedUrl,
+              cleanUrl,
               width: size,
               height: size,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Icon(Icons.shield, color: fallbackColor, size: size),
+              errorBuilder: (context, error, stackTrace) => Icon(Icons.shield, color: fallbackColor, size: size),
             ),
+    );
+  }
+
+  Widget _scoreView(MatchModel match) {
+    bool isNS = match.status == 'NS';
+    return Column(
+      children: [
+        if (isNS)
+          Text(DateFormat('HH:mm').format(match.startTime), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold))
+        else
+          Text('${match.homeScore} - ${match.awayScore}', style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        Text(isNS ? _formatMatchDate(match.startTime) : '⚖ Cân bằng', style: TextStyle(color: isNS ? Colors.white38 : Colors.amber, fontSize: 9)),
+      ],
+    );
+  }
+
+  Widget _statsRow(MatchModel match) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        _stat(Icons.bar_chart, '${match.homeShots} ▎ ${match.awayShots}'),
+        _stat(Icons.rectangle, '${match.homeYellowCards} ▎ ${match.awayYellowCards}', color: Colors.amber),
+        _stat(Icons.rectangle, '${match.homeRedCards} ▎ ${match.awayRedCards}', color: Colors.redAccent),
+      ],
+    );
+  }
+
+  Widget _stat(IconData icon, String val, {Color color = Colors.white24}) {
+    return Row(
+      children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 4),
+        Text(val, style: const TextStyle(color: Colors.white54, fontSize: 10)),
+      ],
+    );
+  }
+
+  Widget _actionBtn() {
+    return SizedBox(
+      width: double.infinity,
+      height: 34,
+      child: ElevatedButton(
+        onPressed: () {},
+        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3B66F5).withOpacity(0.15), elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+        child: const Text('✨ Xem Quẻ Dự Đoán', style: TextStyle(color: Color(0xFF7B96F9), fontSize: 11, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _buildMatchGroups(List<MatchModel> matches) {
+    List<MatchModel> filtered = matches;
+    if (_selectedTab == 'Live') filtered = matches.where((m) => m.status == 'LIVE').toList();
+    if (_selectedTab == 'Kết thúc') filtered = matches.where((m) => m.status == 'FT').toList();
+    if (_selectedTab == 'Sắp diễn ra') filtered = matches.where((m) => m.status == 'NS').toList();
+
+    final live = filtered.where((m) => m.status == 'LIVE').toList();
+    final upcoming = filtered.where((m) => m.status == 'NS').toList();
+    final finished = filtered.where((m) => m.status == 'FT').toList();
+
+    if (filtered.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('Không có trận đấu nào trong quẻ này.', style: TextStyle(color: Colors.white38))));
+
+    return Column(
+      children: [
+        if (live.isNotEmpty) ...[_buildSectionHeader('▎ĐANG DIỄN RA'), ...live.map((m) => _buildSimpleCard(m))],
+        if (upcoming.isNotEmpty) ...[_buildSectionHeader('▎SẮP TỚI'), ...upcoming.map((m) => _buildSimpleCard(m))],
+        if (finished.isNotEmpty) ...[_buildSectionHeader('▎KẾT THÚC'), ...finished.map((m) => _buildSimpleCard(m))],
+      ],
+    );
+  }
+
+  String _formatMatchDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final matchDate = DateTime(date.year, date.month, date.day);
+    final difference = matchDate.difference(today).inDays;
+
+    if (difference == 0) return 'Hôm nay';
+    if (difference == 1) return 'Ngày mai';
+    return DateFormat('dd/MM').format(date);
+  }
+
+  Widget _buildSimpleCard(MatchModel match) {
+    bool isNS = match.status == 'NS';
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: const Color(0xFF161F2C), borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _teamLogo(match.homeLogo, Colors.blueAccent, size: 22),
+              const SizedBox(width: 12),
+              Text(match.homeTeam, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+              const Spacer(),
+              Text(isNS ? DateFormat('HH:mm').format(match.startTime) : '${match.homeScore}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right, color: Colors.white10, size: 18),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _teamLogo(match.awayLogo, Colors.redAccent, size: 22),
+              const SizedBox(width: 12),
+              Text(match.awayTeam, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+              const Spacer(),
+              Text(isNS ? _formatMatchDate(match.startTime) : '${match.awayScore}', style: TextStyle(color: isNS ? Colors.white38 : Colors.white, fontWeight: FontWeight.bold, fontSize: isNS ? 11 : 16)),
+              const SizedBox(width: 26),
+            ],
+          ),
+          const Divider(color: Colors.white10, height: 24),
+          _statsRow(match),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, {bool showSeeAll = false}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+          if (showSeeAll) const Text('TẤT CẢ', style: TextStyle(color: Color(0xFF3B66F5), fontSize: 11, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 }

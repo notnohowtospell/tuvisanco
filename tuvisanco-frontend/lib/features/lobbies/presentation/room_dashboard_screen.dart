@@ -55,7 +55,7 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
       return Icon(Icons.shield, color: fallbackColor, size: size);
     }
     final originalUrl = url.trim();
-    final proxiedUrl = 'http://10.0.2.2:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
+    final proxiedUrl = 'http://192.168.100.32:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(size / 8),

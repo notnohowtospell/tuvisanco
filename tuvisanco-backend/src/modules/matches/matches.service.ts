@@ -38,6 +38,8 @@ export class MatchesService {
       const wcMatches = data.matches || [];
 
       for (const m of wcMatches) {
+        if (!m.id) continue; // BỎ QUA NẾU TRẬN ĐẤU KHÔNG CÓ ID
+
         // 1. Xử lý trạng thái
         let status: 'NS' | 'LIVE' | 'FT' | 'CANCL' = 'NS';
         if (['IN_PLAY', 'PAUSED'].includes(m.status)) status = 'LIVE';

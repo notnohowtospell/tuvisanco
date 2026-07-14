@@ -8,6 +8,8 @@ import '../features/auth/presentation/profile_screen.dart';
 // 1. IMPORT màn hình trận đấu thật của bạn ở đây
 import '../features/matches/presentation/home_screen.dart';
 import '../features/matches/presentation/match_detail_screen.dart';
+import '../features/ranking/presentation/ranking_screen.dart';
+import '../features/news/presentation/news_screen.dart';
 
 // Import các màn hình Lobbies của Huy
 import '../features/lobbies/presentation/rooms_screen.dart';
@@ -156,11 +158,11 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: '/leaderboard',
-          builder: (context, state) => const MockLeaderboardScreen(),
+          builder: (context, state) => const RankingScreen(),
         ),
         GoRoute(
           path: '/news',
-          builder: (context, state) => const MockNewsScreen(),
+          builder: (context, state) => const NewsScreen(),
         ),
         // 3. SỬA CHỖ NÀY: Trả lại màn hình Hồ sơ gốc của tính năng Auth (tránh trùng tên class)
         GoRoute(

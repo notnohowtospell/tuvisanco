@@ -1,14 +1,13 @@
 import 'package:dio/dio.dart';
-import 'dart:io';
 
-// IP máy ảo Android để kết nối tới Backend host (chạy ở cổng 3000)
-const String _baseUrl = 'http://10.0.2.2:3000';
+// ĐÃ SỬA: Dùng chính xác IP máy tính của đạo hữu để máy thật và máy ảo đều dùng được
+const String _baseUrl = 'http://192.168.100.32:3000';
 
 final dioClient = Dio(
   BaseOptions(
     baseUrl: _baseUrl,
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 10),
+    connectTimeout: const Duration(seconds: 60),
+    receiveTimeout: const Duration(seconds: 60),
     headers: {
       'Content-Type': 'application/json',
     },
