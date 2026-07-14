@@ -5,8 +5,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../chat/presentation/chat_screen.dart';
 import '../data/match_model.dart';
-import 'league_filter_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -20,7 +20,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   DateTime _selectedDate = DateTime.now();
   Future<List<MatchModel>>? _matchesFuture;
   List<String> _selectedLeagues = [];
-  bool _isDateSelected = false; // Theo dõi xem user đã chọn ngày cụ thể chưa
+  bool _isDateSelected = false;
 
   @override
   void initState() {
@@ -35,13 +35,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
         url = '/matches?date=$dateStr';
       } else {
-        url = '/matches'; // Để backend tự chọn ngày gần nhất
+        url = '/matches';
       }
       final response = await dioClient.get(url);
       if (response.statusCode == 200) {
         List<dynamic> data = response.data;
         final matches = data.map((json) => MatchModel.fromJson(json)).toList();
-        // Cập nhật ngày hiển thị theo trận đầu tiên nhận được
         if (matches.isNotEmpty && !_isDateSelected) {
           setState(() {
             _selectedDate = matches.first.startTime.toLocal();
@@ -60,6 +59,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0B0F16),
       appBar: _buildAppBar(),
+      floatingActionButton: GestureDetector(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatScreen())),
+        child: Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFF3B66F5), width: 2),
+            boxShadow: [
+              BoxShadow(color: const Color(0xFF3B66F5).withOpacity(0.3), blurRadius: 15, spreadRadius: 2),
+            ],
+            image: const DecorationImage(
+              image: AssetImage('assets/images/ChatBox.png'),
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+      ),
       body: RefreshIndicator(
         onRefresh: () async => setState(() { _matchesFuture = _fetchMatches(); }),
         child: Column(
@@ -116,7 +133,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (matches == null || matches.isEmpty) return;
     if (!mounted) return;
 
-    // Dùng BottomSheet thay vì Navigator.push để tránh xung đột go_router trên web
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -226,7 +242,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return const Center(child: Text('Không có trận đấu nào.', style: TextStyle(color: Colors.white38)));
     }
 
-    // Group by league
     Map<String, List<MatchModel>> groups = {};
     for (var m in filtered) {
       if (_selectedLeagues.isNotEmpty && !_selectedLeagues.contains(m.leagueName)) {
@@ -254,7 +269,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // League Header
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: const BoxDecoration(
@@ -272,8 +286,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ],
                 ),
               ),
-              
-              // Matches in League
               ...leagueMatches.asMap().entries.map((entry) {
                 int idx = entry.key;
                 MatchModel m = entry.value;
@@ -294,8 +306,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildMatchCard(MatchModel match) {
     bool isNS = match.status == 'NS';
     bool isLive = match.status == 'LIVE';
-    
-    // Mock half-time score based on full time score
     int h1Home = (match.homeScore / 2).ceil();
     int h1Away = (match.awayScore / 2).ceil();
     
@@ -307,7 +317,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             Row(
               children: [
-                // Left Column: Time & Status
                 SizedBox(
                   width: 70,
                   child: Column(
@@ -325,10 +334,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                 ),
-                
                 const SizedBox(width: 12),
-                
-                // Middle Column: Teams
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -351,8 +357,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                 ),
-                
-                // Right Column: Scores
                 SizedBox(
                   width: 30,
                   child: Column(
@@ -366,22 +370,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            
             const SizedBox(height: 16),
-            
-            // Bottom Stats Row
             Row(
               children: [
-                // Home Stats
                 _statItem(Icons.flag, '${match.homeShots}', Colors.grey),
                 const SizedBox(width: 8),
                 _statItem(Icons.rectangle, '${match.homeRedCards}', Colors.red),
                 const SizedBox(width: 8),
                 _statItem(Icons.rectangle, '${match.homeYellowCards}', Colors.amber),
-                
                 const Spacer(),
-                
-                // Middle Icons
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(color: const Color(0xFF3B66F5), borderRadius: BorderRadius.circular(4)),
@@ -393,10 +390,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   decoration: BoxDecoration(color: const Color(0xFF3B66F5), borderRadius: BorderRadius.circular(4)),
                   child: const Icon(Icons.tv, color: Colors.white, size: 10),
                 ),
-                
                 const Spacer(),
-                
-                // Away Stats
                 _statItem(Icons.rectangle, '${match.awayYellowCards}', Colors.amber),
                 const SizedBox(width: 8),
                 _statItem(Icons.rectangle, '${match.awayRedCards}', Colors.red),
@@ -404,10 +398,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 _statItem(Icons.flag, '${match.awayShots}', Colors.grey),
               ],
             ),
-            
             const SizedBox(height: 12),
-            
-            // Half Time Score Highlight
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -442,7 +433,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return Icon(Icons.shield, color: fallbackColor, size: size);
     }
     final originalUrl = url.trim();
-    final proxiedUrl = 'http://10.0.2.2:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
+    final proxiedUrl = '$apiBaseUrl/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
     
     return ClipRRect(
       borderRadius: BorderRadius.circular(2),
@@ -465,7 +456,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-// ── BottomSheet lọc giải đấu (tránh xung đột go_router trên web) ──
 class _LeagueFilterSheet extends StatefulWidget {
   final List<MatchModel> matches;
   final List<String> initiallySelected;
@@ -519,7 +509,6 @@ class _LeagueFilterSheetState extends State<_LeagueFilterSheet> {
       final country = _leagueToCountry[league] ?? 'KHÁC';
       (_countryGroups[country] ??= []).add(league);
     }
-    // Sắp xếp: THẾ GIỚI lên đầu, rồi theo alphabet
     _sortedCountries = _countryGroups.keys.toList()
       ..sort((a, b) {
         if (a == 'THẾ GIỚI') return -1;
@@ -545,7 +534,6 @@ class _LeagueFilterSheetState extends State<_LeagueFilterSheet> {
       ),
       child: Column(
         children: [
-          // Handle bar
           Container(
             margin: const EdgeInsets.only(top: 12, bottom: 4),
             width: 40, height: 4,
@@ -565,7 +553,6 @@ class _LeagueFilterSheetState extends State<_LeagueFilterSheet> {
             ),
           ),
           const Divider(color: Colors.white10, height: 1),
-          // List
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -625,7 +612,6 @@ class _LeagueFilterSheetState extends State<_LeagueFilterSheet> {
               },
             ),
           ),
-          // Bottom bar
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             decoration: const BoxDecoration(
@@ -646,7 +632,6 @@ class _LeagueFilterSheetState extends State<_LeagueFilterSheet> {
                   const Spacer(),
                   ElevatedButton(
                     onPressed: () {
-                      // Nếu chọn tất cả → trả về rỗng = hiển thị tất cả
                       final result = _selectedLeagues.length == _allLeagues.length
                           ? <String>[]
                           : List<String>.from(_selectedLeagues);

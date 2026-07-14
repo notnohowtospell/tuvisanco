@@ -1,11 +1,28 @@
 import 'package:dio/dio.dart';
+import 'dart:io';
 
-// ĐÃ SỬA: Dùng chính xác IP máy tính của đạo hữu để máy thật và máy ảo đều dùng được
-const String _baseUrl = 'http://192.168.100.32:3000';
+// Tự động chọn BaseUrl phù hợp: 10.0.2.2 cho Emulator, IP thật cho máy vật lý
+String getSmartBaseUrl() {
+  // Đạo hữu hãy thay IP này bằng IP máy tính của mình khi dùng máy thật
+  const String pcIp = '192.168.100.32'; 
+  
+  try {
+    if (Platform.isAndroid) {
+      // Android Emulator dùng 10.0.2.2 để gọi về localhost của PC
+      // Nhưng nếu đạo hữu dùng máy thật, ta ưu tiên dùng pcIp
+      return 'http://$pcIp:3000';
+    }
+  } catch (e) {
+    // Fallback cho Web hoặc các nền tảng khác
+  }
+  return 'http://localhost:3000';
+}
+
+final String apiBaseUrl = getSmartBaseUrl();
 
 final dioClient = Dio(
   BaseOptions(
-    baseUrl: _baseUrl,
+    baseUrl: apiBaseUrl,
     connectTimeout: const Duration(seconds: 60),
     receiveTimeout: const Duration(seconds: 60),
     headers: {

@@ -1,6 +1,6 @@
 class MatchModel {
   final String id;
-  final int apiFootballId;
+  final String apiFootballId;
   final String leagueName;
   final String homeTeam;
   final String? homeLogo;
@@ -30,6 +30,8 @@ class MatchModel {
   final String? stadium;
   final String? referee;
   final List<dynamic>? h2hHistory;
+  final Map<String, dynamic>? lineupHome;
+  final Map<String, dynamic>? lineupAway;
 
   MatchModel({
     required this.id,
@@ -57,12 +59,14 @@ class MatchModel {
     this.stadium,
     this.referee,
     this.h2hHistory,
+    this.lineupHome,
+    this.lineupAway,
   });
 
   factory MatchModel.fromJson(Map<String, dynamic> json) {
     return MatchModel(
       id: json['id'] ?? '',
-      apiFootballId: json['apiFootballId'] ?? 0,
+      apiFootballId: json['apiFootballId']?.toString() ?? '',
       leagueName: json['leagueName'] ?? 'Giải đấu khác',
       homeTeam: json['homeTeam'] ?? '',
       homeLogo: json['homeLogo'],
@@ -86,6 +90,8 @@ class MatchModel {
       stadium: json['stadium'],
       referee: json['referee'],
       h2hHistory: json['h2hHistory'],
+      lineupHome: json['lineupHome'],
+      lineupAway: json['lineupAway'],
     );
   }
 }
