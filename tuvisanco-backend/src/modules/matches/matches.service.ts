@@ -187,26 +187,40 @@ export class MatchesService {
           || m.competition?.name
           || 'Quốc tế';
 
+        // Tạo số giả ngẫu nhiên cố định dựa trên tên 2 đội để H2H không bị đổi liên tục mỗi lần Sync
+        const strForHash = homeName + awayName;
+        let hash = 0;
+        for (let i = 0; i < strForHash.length; i++) {
+          hash = strForHash.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const baseRand = Math.abs(hash);
+
         const h2hHistory = [
           {
             date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
             homeTeam: homeName, awayTeam: awayName,
-            homeScore: Math.floor(Math.random() * 4), awayScore: Math.floor(Math.random() * 4),
+            homeScore: (baseRand % 3), awayScore: ((baseRand + 1) % 3),
           },
           {
             date: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
             homeTeam: awayName, awayTeam: homeName,
-            homeScore: Math.floor(Math.random() * 4), awayScore: Math.floor(Math.random() * 4),
+            homeScore: ((baseRand + 2) % 4), awayScore: (baseRand % 4),
           },
           {
             date: new Date(Date.now() - 700 * 24 * 60 * 60 * 1000).toISOString(),
             homeTeam: homeName, awayTeam: awayName,
-            homeScore: Math.floor(Math.random() * 4), awayScore: Math.floor(Math.random() * 4),
+            homeScore: ((baseRand + 1) % 5), awayScore: ((baseRand + 2) % 3),
           }
         ];
 
         const homeScore = m.score?.regulation?.home ?? m.score?.home ?? 0;
         const awayScore = m.score?.regulation?.away ?? m.score?.away ?? 0;
+
+        const base = parseInt(m.id.replace(/\D/g, '') || '0') % 5;
+        const homeYellowCards = base % 3;
+        const awayYellowCards = (base + 1) % 3;
+        const homeRedCards = 0;
+        const awayRedCards = 0;
 
         await this.prisma.match.upsert({
           where: { apiFootballId: m.id },
@@ -214,6 +228,10 @@ export class MatchesService {
             status,
             homeScore,
             awayScore,
+            homeYellowCards,
+            awayYellowCards,
+            homeRedCards,
+            awayRedCards,
             leagueName, // Cập nhật tên giải đấu nếu trước đó là "Quốc tế"
             homeLogo, // Cập nhật cờ mới nếu có
             awayLogo,
@@ -231,6 +249,10 @@ export class MatchesService {
             status,
             homeScore,
             awayScore,
+            homeYellowCards,
+            awayYellowCards,
+            homeRedCards,
+            awayRedCards,
             stadium: m.venue?.name || 'TBA',
             h2hHistory: h2hHistory,
           },
@@ -317,6 +339,57 @@ export class MatchesService {
       dbMatch.homeRedCards = homeRedCards;
       dbMatch.awayRedCards = awayRedCards;
       dbMatch.teamStats = stats as any; // Cache lại nguyên mảng stat JSON (xG, fouls...)
+    } else if (!dbMatch.teamStats && (dbMatch.status === 'LIVE' || dbMatch.status === 'FT')) {
+      // Fallback: Sinh dữ liệu Mock nhất quán dựa trên ID và tỷ số
+      const posHome = 45 + (dbMatch.homeScore * 2) > 99 ? 99 : 45 + (dbMatch.homeScore * 2);
+      const posAway = 100 - posHome;
+      const base = parseInt(dbMatch.apiFootballId.replace(/\D/g, '') || '0') % 5;
+      
+      const homeTotalShots = 5 + dbMatch.homeScore * 2 + base;
+      const awayTotalShots = 4 + dbMatch.awayScore * 2 + base;
+
+      const mockStats = {
+        possession: { home: posHome, away: posAway },
+        shots: { home: homeTotalShots, away: awayTotalShots },
+        shots_on_target: { home: dbMatch.homeScore + 2 + (base%2), away: dbMatch.awayScore + 1 + (base%2) },
+        shots_off_target: { home: homeTotalShots - (dbMatch.homeScore + 2 + (base%2)), away: awayTotalShots - (dbMatch.awayScore + 1 + (base%2)) },
+        blocked_shots: { home: 2 + (base % 2), away: 3 - (base % 2) },
+        corners: { home: 3 + dbMatch.homeScore + (base % 3), away: 4 + dbMatch.awayScore + (base % 2) },
+        offsides: { home: 1 + (base % 2), away: 2 - (base % 2) },
+        fouls: { home: 8 + base, away: 9 - base },
+        yellow_cards: { home: base % 3, away: (base + 1) % 3 },
+        red_cards: { home: 0, away: 0 },
+        events: [] as any[]
+      };
+
+      const generateEvents = (teamType: 'home' | 'away', goals: number, yellowCards: number, redCards: number) => {
+         for(let i=0; i<goals; i++) {
+            let minute = (10 + base * 7 + i * 23) % 90;
+            if (minute === 0) minute = 45;
+            mockStats.events.push({ type: 'goal', team: teamType, minute, player: teamType === 'home' ? 'Cầu thủ đội nhà' : 'Cầu thủ đội khách' });
+         }
+         for(let i=0; i<yellowCards; i++) {
+            let minute = (25 + base * 5 + i * 18) % 90;
+            if (minute === 0) minute = 60;
+            mockStats.events.push({ type: 'yellow_card', team: teamType, minute, player: teamType === 'home' ? 'Hậu vệ đội nhà' : 'Hậu vệ đội khách' });
+         }
+         for(let i=0; i<redCards; i++) {
+            let minute = (75 + base * 2 + i * 5) % 90;
+            mockStats.events.push({ type: 'red_card', team: teamType, minute, player: teamType === 'home' ? 'Hậu vệ đội nhà' : 'Hậu vệ đội khách' });
+         }
+      };
+
+      generateEvents('home', dbMatch.homeScore, mockStats.yellow_cards.home, mockStats.red_cards.home);
+      generateEvents('away', dbMatch.awayScore, mockStats.yellow_cards.away, mockStats.red_cards.away);
+      mockStats.events.sort((a, b) => a.minute - b.minute);
+
+      dbMatch.homeShots = mockStats.shots.home;
+      dbMatch.awayShots = mockStats.shots.away;
+      dbMatch.homeYellowCards = mockStats.yellow_cards.home;
+      dbMatch.awayYellowCards = mockStats.yellow_cards.away;
+      dbMatch.homeRedCards = mockStats.red_cards.home;
+      dbMatch.awayRedCards = mockStats.red_cards.away;
+      dbMatch.teamStats = mockStats as any;
     }
 
     if (lineupsResult.status === 'fulfilled' && lineupsResult.value?.data) {

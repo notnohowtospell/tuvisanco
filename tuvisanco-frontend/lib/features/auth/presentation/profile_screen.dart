@@ -25,7 +25,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _fetchUserData() async {
     final auth = ref.read(authProvider);
-    if (auth.userId == null) return;
+    if (auth.userId == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
     
     setState(() => _isLoading = true);
     try {
@@ -88,15 +91,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   // 3. Menu Actions
                   _buildMenuSection(),
                   
-                  const SizedBox(height: 20),
-                  
-                  // 4. Logout Button
-                  _buildLogoutBtn(),
-                  
                   const SizedBox(height: 24),
                   
-                  // 5. Achievement Card
+                  // 4. Achievement Card
                   _buildAchievementCard(),
+                  
+                  const SizedBox(height: 24),
+
+                  // 5. Logout Button
+                  _buildLogoutBtn(),
                   
                   const SizedBox(height: 40),
                 ],

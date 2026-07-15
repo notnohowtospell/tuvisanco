@@ -32,6 +32,9 @@ class MatchModel {
   final List<dynamic>? h2hHistory;
   final Map<String, dynamic>? lineupHome;
   final Map<String, dynamic>? lineupAway;
+  final Map<String, dynamic>? teamStats;
+
+  List<dynamic> get events => teamStats?['events'] as List<dynamic>? ?? [];
 
   MatchModel({
     required this.id,
@@ -61,6 +64,7 @@ class MatchModel {
     this.h2hHistory,
     this.lineupHome,
     this.lineupAway,
+    this.teamStats,
   });
 
   factory MatchModel.fromJson(Map<String, dynamic> json) {
@@ -76,7 +80,7 @@ class MatchModel {
       awayScore: json['awayScore'] ?? 0,
       status: json['status'] ?? 'NS',
       minuteElapsed: json['minuteElapsed'] ?? 0,
-      startTime: DateTime.parse(json['startTime']),
+      startTime: DateTime.parse(json['startTime']).toLocal(),
       homeShots: json['homeShots'] ?? 0,
       awayShots: json['awayShots'] ?? 0,
       homeYellowCards: json['homeYellowCards'] ?? 0,
@@ -92,6 +96,7 @@ class MatchModel {
       h2hHistory: json['h2hHistory'] is List ? json['h2hHistory'] as List : null,
       lineupHome: json['lineupHome'] is Map ? Map<String, dynamic>.from(json['lineupHome'] as Map) : null,
       lineupAway: json['lineupAway'] is Map ? Map<String, dynamic>.from(json['lineupAway'] as Map) : null,
+      teamStats: json['teamStats'] is Map ? Map<String, dynamic>.from(json['teamStats'] as Map) : null,
     );
   }
 }
