@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'auth_provider.dart';
+import '../network/dio_client.dart';
 
 class CheckInDay {
   final int dayIndex;
@@ -60,7 +61,7 @@ class CheckInState {
 
 class DailyCheckInNotifier extends Notifier<CheckInState> {
   final Dio _dio = Dio(BaseOptions(
-    baseUrl: "http://192.168.100.32:3000/users",
+    baseUrl: "$apiBaseUrl/users",
     connectTimeout: const Duration(seconds: 5),
     receiveTimeout: const Duration(seconds: 5),
   ));

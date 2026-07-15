@@ -48,7 +48,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> with SingleTicker
           _isLoading = false;
         });
       }
-    } catch (e) {
+    } catch (e, stack) {
+      print('LỖI TẢI CHI TIẾT TRẬN ĐẤU: $e');
+      print(stack);
       setState(() {
         _error = 'Không thể kết nối máy chủ';
         _isLoading = false;

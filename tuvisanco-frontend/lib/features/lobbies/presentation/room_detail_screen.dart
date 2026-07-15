@@ -9,6 +9,7 @@ import '../data/lobbies_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart';
+import '../../../core/network/dio_client.dart';
 
 // Lưu trữ danh sách mã cược đã hiển thị thông báo để tránh lặp lại
 final Set<String> _notifiedBetIds = {};
@@ -46,7 +47,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
       return Icon(Icons.shield, color: fallbackColor, size: size);
     }
     final originalUrl = url.trim();
-    final proxiedUrl = 'http://192.168.100.32:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
+    final proxiedUrl = '$apiBaseUrl/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(size / 8),

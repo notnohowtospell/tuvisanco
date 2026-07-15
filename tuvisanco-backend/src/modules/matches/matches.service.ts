@@ -292,7 +292,9 @@ export class MatchesService {
       const detail = await this.callApi(`/football/matches/${dbMatch.apiFootballId}`);
       if (detail && detail.data) {
         dbMatch.stadium = detail.data.venue?.name || dbMatch.stadium;
-        dbMatch.referee = detail.data.referee || dbMatch.referee;
+        dbMatch.referee = (detail.data.referee && typeof detail.data.referee === 'object')
+          ? detail.data.referee.name
+          : (detail.data.referee || dbMatch.referee);
       }
     } catch(e) { /* ignore */ }
 

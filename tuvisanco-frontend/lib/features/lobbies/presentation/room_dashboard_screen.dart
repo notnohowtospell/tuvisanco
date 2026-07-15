@@ -7,6 +7,7 @@ import '../data/lobbies_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart';
+import '../../../core/network/dio_client.dart';
 
 class RoomDashboardScreen extends ConsumerStatefulWidget {
   final String roomCode;
@@ -55,7 +56,7 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
       return Icon(Icons.shield, color: fallbackColor, size: size);
     }
     final originalUrl = url.trim();
-    final proxiedUrl = 'http://192.168.100.32:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
+    final proxiedUrl = '$apiBaseUrl/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(size / 8),

@@ -4,12 +4,11 @@ import 'dart:io';
 // Tự động chọn BaseUrl phù hợp: 10.0.2.2 cho Emulator, IP thật cho máy vật lý
 String getSmartBaseUrl() {
   // Đạo hữu hãy thay IP này bằng IP máy tính của mình khi dùng máy thật
-  const String pcIp = '192.168.100.32'; 
+  const String pcIp = '10.0.2.2'; 
   
   try {
     if (Platform.isAndroid) {
       // Android Emulator dùng 10.0.2.2 để gọi về localhost của PC
-      // Nhưng nếu đạo hữu dùng máy thật, ta ưu tiên dùng pcIp
       return 'http://$pcIp:3000';
     }
   } catch (e) {

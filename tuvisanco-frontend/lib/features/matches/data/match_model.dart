@@ -89,9 +89,9 @@ class MatchModel {
       aiAnalysis: json['aiAnalysis'],
       stadium: json['stadium'],
       referee: json['referee'],
-      h2hHistory: json['h2hHistory'],
-      lineupHome: json['lineupHome'],
-      lineupAway: json['lineupAway'],
+      h2hHistory: json['h2hHistory'] is List ? json['h2hHistory'] as List : null,
+      lineupHome: json['lineupHome'] is Map ? Map<String, dynamic>.from(json['lineupHome'] as Map) : null,
+      lineupAway: json['lineupAway'] is Map ? Map<String, dynamic>.from(json['lineupAway'] as Map) : null,
     );
   }
 }
