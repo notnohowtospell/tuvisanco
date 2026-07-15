@@ -12,6 +12,8 @@ String get baseUrl {
   return 'http://127.0.0.1:3005';
 }
 
+final String apiBaseUrl = baseUrl;
+
 final dioClient = Dio(
   BaseOptions(
     baseUrl: baseUrl,

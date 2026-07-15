@@ -8,12 +8,18 @@ export class AiService {
 
   constructor(private readonly prisma: PrismaService) {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey && apiKey !== 'your_google_gemini_api_key') {
+    // Xử lý loại bỏ dấu ngoặc kép và khoảng trắng dư thừa
+    const cleanKey = apiKey?.replace(/["']/g, '').trim();
+
+    if (cleanKey) {
       try {
-        this.ai = new GoogleGenerativeAI(apiKey);
+        this.ai = new GoogleGenerativeAI(cleanKey);
+        console.log(`📡 Đã nạp Thiên Cơ AI với Key: ${cleanKey.substring(0, 5)}...`);
       } catch (e) {
-        console.error('Failed to initialize Google Gemini AI SDK:', e);
+        console.error('❌ Khởi tạo AI thất bại:', e);
       }
+    } else {
+      console.warn('⚠️ CẢNH BÁO: GEMINI_API_KEY chưa được cấu hình trong file .env');
     }
   }
 
@@ -21,63 +27,92 @@ export class AiService {
     const match = await this.prisma.match.findUnique({ where: { id: matchId } });
     if (!match) throw new Error('Match not found');
 
-    // Nếu đã phân tích rồi thì trả về luôn từ cache DB
     if (match.aiWinProb !== null) {
-      return {
-        winProb: match.aiWinProb,
-        drawProb: match.aiDrawProb,
-        lossProb: match.aiLossProb,
-        analysis: match.aiAnalysis,
-      };
+      return { winProb: match.aiWinProb, drawProb: match.aiDrawProb, lossProb: match.aiLossProb, analysis: match.aiAnalysis };
     }
 
-    // Nếu chưa có key thì trả về Mock phục vụ quá trình làm lab local của sinh viên
-    if (!this.ai) {
-      const mockResult = {
-        winProb: 45.0,
-        drawProb: 30.0,
-        lossProb: 25.0,
-        analysis: `[Mock AI - Chưa có API Key] Trận đấu giữa ${match.homeTeam} và ${match.awayTeam} dự báo lợi thế thuộc về chủ nhà do ưu thế sân bãi và chuỗi 3 trận thắng liên tiếp vừa qua. Dự đoán tỷ số khả quan là 2-1.`,
-      };
-      
-      await this.prisma.match.update({
-        where: { id: matchId },
-        data: {
-          aiWinProb: mockResult.winProb,
-          aiDrawProb: mockResult.drawProb,
-          aiLossProb: mockResult.lossProb,
-          aiAnalysis: mockResult.analysis,
-        },
-      });
-      
-      return mockResult;
-    }
+    if (!this.ai) return this.getMockPrediction(match);
 
     try {
+      // ĐÃ SỬA: Đổi về model 1.5-flash chính xác (trước đó là 3.5-flash không tồn tại)
       const model = this.ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const prompt = `Phân tích trận đấu bóng đá: ${match.homeTeam} gặp ${match.awayTeam}. Đưa ra tỉ lệ phần trăm thắng của chủ nhà, hòa, và khách dưới dạng số (tổng là 100). Sau đó viết 1 đoạn nhận định tiếng Việt ngắn gọn (dưới 100 từ). Trả về dạng JSON chuẩn có cấu trúc: {"win": số, "draw": số, "loss": số, "analysis": "nhận định"}`;
+      const prompt = `Phân tích trận đấu: ${match.homeTeam} vs ${match.awayTeam}. Trả về JSON: {"win": số, "draw": số, "loss": số, "analysis": "nhận định tiếng Việt"}`;
       
       const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
-      const cleanJson = responseText.substring(responseText.indexOf('{'), responseText.lastIndexOf('}') + 1);
-      const parsed = JSON.parse(cleanJson);
+      const response = await result.response;
+      const text = response.text();
+      const parsed = JSON.parse(text.replace(/```json|```/g, ''));
 
-      const updateData = {
-        aiWinProb: parseFloat(parsed.win) || 33.3,
-        aiDrawProb: parseFloat(parsed.draw) || 33.3,
-        aiLossProb: parseFloat(parsed.loss) || 33.3,
-        aiAnalysis: parsed.analysis || 'Không có nhận định.',
-      };
-
-      await this.prisma.match.update({
+      return await this.prisma.match.update({
         where: { id: matchId },
-        data: updateData,
+        data: {
+          aiWinProb: parsed.win,
+          aiDrawProb: parsed.draw,
+          aiLossProb: parsed.loss,
+          aiAnalysis: parsed.analysis,
+        },
       });
-
-      return updateData;
     } catch (e) {
-      console.error('Gemini API Error, falling back to mock:', e);
-      return { winProb: 33.3, drawProb: 33.3, lossProb: 33.3, analysis: 'Lỗi kết nối hoặc phân tích Gemini AI. Vui lòng kiểm tra lại key cấu hình.' };
+      console.error('❌ Lỗi Dự đoán AI:', e);
+      return this.getMockPrediction(match);
     }
   }
+
+  private getMockPrediction(match: any) {
+    return { winProb: 40, drawProb: 30, lossProb: 30, analysis: `Trận đấu ${match.homeTeam} gặp ${match.awayTeam} dự kiến sẽ rất căng thẳng.` };
+  }
+
+  async chat(message: string) {
+    if (!this.ai) {
+      return {
+        response: 'Chào đạo hữu! Lão mỗ đang trong quá trình bế quan tu luyện (Chưa nạp được API Key). ' +
+                  'Đạo hữu hãy kiểm tra lại file .env xem GEMINI_API_KEY đã đúng chưa nhé!'
+      };
+    }
+
+    const modelsToTry = [
+      'gemini-1.5-flash',
+      'gemini-1.5-pro',
+      'gemini-3.5-flash',
+      'gemini-2.5-flash',
+      'gemini-pro',
+    ];
+    let lastError = '';
+
+    console.log(`🔮 Đang thử giải mã thiên cơ với tin nhắn: "${message}"`);
+
+    for (const modelName of modelsToTry) {
+      try {
+        const model = this.ai.getGenerativeModel({ model: modelName });
+        const chat = model.startChat({
+          history: [
+            { role: 'user', parts: [{ text: 'Bạn là "Lão Đạo Hữu AI", một đạo sĩ uyên bác về tử vi bóng đá. Xưng "Lão mỗ", gọi người dùng là "đạo hữu". Luôn lái câu chuyện về phong thủy và vận mệnh sân cỏ.' }] },
+            { role: 'model', parts: [{ text: 'Lão mỗ đã rõ. Thiên cơ hiển hiện, đạo hữu muốn thỉnh giáo điều chi?' }] },
+          ],
+        });
+
+        const result = await chat.sendMessage(message);
+        const response = await result.response;
+        console.log(`✅ Thành công với model: ${modelName}`);
+        return { response: response.text() };
+      } catch (e: any) {
+        lastError = e.message || 'Lỗi không xác định';
+        console.error(`❌ Model ${modelName} thất bại:`, lastError);
+        continue;
+      }
+    }
+
+    // Nếu tất cả model đều thất bại
+    if (lastError.includes('API key not valid')) {
+      return { response: 'Huyền cơ báo rằng: "API Key không hợp lệ". Đạo hữu ơi, cái mã bắt đầu bằng "AQ.Ab..." có vẻ không phải là API Key chính thức của Gemini. Đạo hữu hãy tìm mã bắt đầu bằng "AIza" trong Google AI Studio nhé!' };
+    }
+
+    if (lastError.includes('404') || lastError.includes('not found')) {
+      return { response: `Huyền cơ báo lỗi 404: Không tìm thấy Model phù hợp. Lỗi chi tiết: ${lastError}. Đạo hữu hãy thử kiểm tra lại vùng (Region) của API Key nhé.` };
+    }
+
+    return { response: `Huyền cơ bị lỗi: ${lastError}. Đạo hữu hãy kiểm tra lại Key trong file .env nhé.` };
+  }
+
+
 }

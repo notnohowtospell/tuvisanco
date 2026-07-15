@@ -296,7 +296,9 @@ export class MatchesService {
 
     if (detailResult.status === 'fulfilled' && detailResult.value?.data) {
       dbMatch.stadium = detailResult.value.data.venue?.name || dbMatch.stadium;
-      dbMatch.referee = detailResult.value.data.referee || dbMatch.referee;
+      dbMatch.referee = (detailResult.value.data.referee && typeof detailResult.value.data.referee === 'object')
+        ? detailResult.value.data.referee.name
+        : (detailResult.value.data.referee || dbMatch.referee);
     }
 
     if (statsResult.status === 'fulfilled' && statsResult.value?.data) {

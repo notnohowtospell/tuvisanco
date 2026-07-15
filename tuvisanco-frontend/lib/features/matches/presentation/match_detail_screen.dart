@@ -49,8 +49,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> with SingleTicker
           _isLoading = false;
         });
       }
-    } catch (e) {
-      print('LỖI CHI TIẾT TRẬN ĐẤU: $e');
+    } catch (e, stack) {
+      print('LỖI TẢI CHI TIẾT TRẬN ĐẤU: $e');
+      print(stack);
       setState(() {
         _error = 'Không thể kết nối máy chủ';
         _isLoading = false;
@@ -62,8 +63,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> with SingleTicker
     if (url == null || url.isEmpty) {
       return Icon(Icons.shield, color: fallbackColor, size: size);
     }
-    
-    final originalUrl = url;
+    final originalUrl = url.trim();
     final proxiedUrl = '$baseUrl/matches/proxy/image?url=${Uri.encodeComponent(originalUrl)}';
     
     return ClipRRect(

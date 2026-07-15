@@ -10,6 +10,7 @@ class MemberLeaderboardItem {
   final String fullName;
   int wagered;
   int won;
+  final List<String> recentResults = [];
   MemberLeaderboardItem({required this.userId, required this.fullName, this.wagered = 0, this.won = 0});
   int get netProfit => won - wagered;
 }
@@ -59,9 +60,13 @@ class PLDashboardScreen extends ConsumerWidget {
     }
     final int personalPL = personalWon - personalWagered;
 
+    // Sắp xếp các cược theo thời gian tăng dần trước khi tính toán phong độ
+    final sortedBets = List<dynamic>.from(placedBets)
+      ..sort((a, b) => a['createdAt'].toString().compareTo(b['createdAt'].toString()));
+
     // Tính toán bảng xếp hạng thành viên lãi nhất phòng (Leaderboard phòng)
     final Map<String, MemberLeaderboardItem> leaderboardMap = {};
-    for (var bet in placedBets) {
+    for (var bet in sortedBets) {
       final String uId = bet['userId']?.toString() ?? '';
       final String name = bet['user'] != null ? bet['user']['fullName'] : 'Ẩn danh';
       final int points = (bet['points'] as num).toInt();
@@ -73,6 +78,15 @@ class PLDashboardScreen extends ConsumerWidget {
       }
       leaderboardMap[uId]!.wagered += points;
       leaderboardMap[uId]!.won += payout;
+
+      // Lưu kết quả cược gần nhất (W = Thắng, L = Thua, P = Đang chờ)
+      if (bet['result'] == 'WON') {
+        leaderboardMap[uId]!.recentResults.add('W');
+      } else if (bet['result'] == 'LOST') {
+        leaderboardMap[uId]!.recentResults.add('L');
+      } else {
+        leaderboardMap[uId]!.recentResults.add('P');
+      }
     }
 
     final leaderboardList = leaderboardMap.values.toList()
@@ -348,6 +362,8 @@ class PLDashboardScreen extends ConsumerWidget {
                         'Tổng cược: ${item.wagered} pts | Thắng: ${item.won} pts',
                         style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                       ),
+                      const SizedBox(height: 6),
+                      _buildStreakDots(item.recentResults),
                     ],
                   ),
                 ),
@@ -374,6 +390,59 @@ class PLDashboardScreen extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildStreakDots(List<String> streaks) {
+    if (streaks.isEmpty) return const SizedBox.shrink();
+
+    // Lấy tối đa 5 kết quả cược gần nhất
+    final displayStreaks = streaks.length > 5 
+        ? streaks.sublist(streaks.length - 5) 
+        : streaks;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'Phong độ: ',
+          style: TextStyle(color: AppTheme.textDisabled, fontSize: 9),
+        ),
+        ...displayStreaks.map((s) {
+          Color dotColor;
+          String text;
+          if (s == 'W') {
+            dotColor = Colors.greenAccent;
+            text = 'W';
+          } else if (s == 'L') {
+            dotColor = Colors.redAccent;
+            text = 'L';
+          } else {
+            dotColor = Colors.white54;
+            text = 'P'; // Pending
+          }
+
+          return Container(
+            margin: const EdgeInsets.only(left: 3),
+            width: 15,
+            height: 15,
+            decoration: BoxDecoration(
+              color: dotColor.withOpacity(0.12),
+              shape: BoxShape.circle,
+              border: Border.all(color: dotColor.withOpacity(0.6), width: 0.8),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              text,
+              style: TextStyle(
+                color: dotColor,
+                fontSize: 8,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        }).toList(),
+      ],
     );
   }
 

@@ -5,6 +5,9 @@ import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../data/lobbies_provider.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:intl/intl.dart';
+import '../../../core/network/dio_client.dart';
 
 class RoomsScreen extends ConsumerStatefulWidget {
   const RoomsScreen({super.key});
@@ -302,18 +305,22 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
       itemBuilder: (context, index) {
         final room = rooms[index];
         final bool isOwner = room['ownerId'] == ref.read(authProvider).userId;
-        final String matchDesc = room['match'] != null
-            ? "${room['match']['homeTeam']} vs ${room['match']['awayTeam']}"
-            : "Chưa chọn trận";
-
         final int memberCount = room['members']?.length ?? 0;
+        final match = room['match'];
+        final String matchStatus = match != null ? (match['status'] ?? 'NS') : 'NS';
+        final bool isLive = matchStatus == 'LIVE';
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12.0),
           color: AppTheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-            side: const BorderSide(color: AppTheme.surfaceBorder),
+            side: BorderSide(
+              color: isLive 
+                  ? Colors.greenAccent.withOpacity(0.5) 
+                  : AppTheme.surfaceBorder,
+              width: isLive ? 1.5 : 1.0,
+            ),
           ),
           child: InkWell(
             onTap: () {
@@ -343,11 +350,13 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
                       _buildStatusBadge(room['status']),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    matchDesc,
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
-                  ),
+                  const SizedBox(height: 12),
+                  match != null
+                      ? _buildMatchInfoRow(match)
+                      : const Text(
+                          'Chưa chọn trận đấu',
+                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                        ),
                   const SizedBox(height: 12),
                   const Divider(color: AppTheme.surfaceBorder, height: 1),
                   const SizedBox(height: 12),
@@ -397,6 +406,212 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildMatchInfoRow(dynamic match) {
+    final String homeName = match['homeTeam'] ?? '';
+    final String awayName = match['awayTeam'] ?? '';
+    final String? homeLogo = match['homeLogo'];
+    final String? awayLogo = match['awayLogo'];
+    final int homeScore = match['homeScore'] ?? 0;
+    final int awayScore = match['awayScore'] ?? 0;
+    final String status = match['status'] ?? 'NS';
+    final int minuteElapsed = match['minuteElapsed'] ?? 0;
+    final String startTimeStr = match['startTime'] ?? '';
+
+    String timeDisplay = 'VS';
+    if (status == 'NS' && startTimeStr.isNotEmpty) {
+      try {
+        final parsedDate = DateTime.parse(startTimeStr).toLocal();
+        timeDisplay = DateFormat('dd/MM HH:mm').format(parsedDate);
+      } catch (e) {
+        timeDisplay = 'VS';
+      }
+    }
+
+    Widget scoreOrVsWidget;
+    if (status == 'LIVE') {
+      scoreOrVsWidget = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: Colors.greenAccent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$minuteElapsed\'',
+                  style: const TextStyle(
+                    color: Colors.greenAccent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '$homeScore - $awayScore',
+            style: const TextStyle(
+              color: Colors.greenAccent,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      );
+    } else if (status == 'FT') {
+      scoreOrVsWidget = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.textSecondary.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'FT',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '$homeScore - $awayScore',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      );
+    } else {
+      scoreOrVsWidget = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceElevated,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          timeDisplay,
+          style: const TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceElevated.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      ),
+      child: Row(
+        children: [
+          // Home Team
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Text(
+                    homeName,
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _teamLogo(homeLogo, Colors.blue, size: 24),
+              ],
+            ),
+          ),
+          // Center Score/VS
+          Container(
+            width: 80,
+            alignment: Alignment.center,
+            child: scoreOrVsWidget,
+          ),
+          // Away Team
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                _teamLogo(awayLogo, Colors.red, size: 24),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    awayName,
+                    textAlign: TextAlign.start,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _teamLogo(String? url, Color fallbackColor, {double size = 24}) {
+    if (url == null || url.isEmpty) {
+      return Icon(Icons.shield, color: fallbackColor, size: size);
+    }
+    final originalUrl = url.trim();
+    final proxiedUrl = '$apiBaseUrl/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size / 8),
+      child: originalUrl.toLowerCase().endsWith('.svg')
+          ? SvgPicture.network(
+              proxiedUrl,
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
+              placeholderBuilder: (_) => Icon(Icons.shield, color: fallbackColor, size: size),
+            )
+          : Image.network(
+              proxiedUrl,
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => Icon(Icons.shield, color: fallbackColor, size: size),
+            ),
     );
   }
 

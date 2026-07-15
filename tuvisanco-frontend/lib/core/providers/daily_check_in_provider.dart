@@ -61,6 +61,7 @@ class CheckInState {
 
 class DailyCheckInNotifier extends Notifier<CheckInState> {
 
+
   @override
   CheckInState build() {
     return CheckInState();

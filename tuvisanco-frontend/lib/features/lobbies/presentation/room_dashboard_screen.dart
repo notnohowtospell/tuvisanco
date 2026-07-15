@@ -8,6 +8,7 @@ import '../data/lobbies_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart';
+import '../../../core/network/dio_client.dart';
 
 class RoomDashboardScreen extends ConsumerStatefulWidget {
   final String roomCode;

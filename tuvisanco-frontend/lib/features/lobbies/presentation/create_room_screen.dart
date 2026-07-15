@@ -32,6 +32,7 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
   Future<void> _fetchMatches() async {
     try {
       final response = await dioClient.get('/matches');
+      if (!mounted) return;
       setState(() {
         _matches = response.data;
         if (_matches.isNotEmpty) {
@@ -40,6 +41,7 @@ class _CreateRoomScreenState extends ConsumerState<CreateRoomScreen> {
         _isLoadingMatches = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoadingMatches = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lỗi tải danh sách trận đấu.'), backgroundColor: Colors.red),
