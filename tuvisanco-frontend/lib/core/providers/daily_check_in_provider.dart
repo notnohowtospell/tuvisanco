@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'auth_provider.dart';
+import '../network/dio_client.dart';
 
 class CheckInDay {
   final int dayIndex;
@@ -59,11 +60,6 @@ class CheckInState {
 }
 
 class DailyCheckInNotifier extends Notifier<CheckInState> {
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: "http://10.0.2.2:3000/users",
-    connectTimeout: const Duration(seconds: 5),
-    receiveTimeout: const Duration(seconds: 5),
-  ));
 
   @override
   CheckInState build() {
@@ -77,7 +73,7 @@ class DailyCheckInNotifier extends Notifier<CheckInState> {
   Future<void> fetchStatus(String userId) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final response = await _dio.get('/check-in-status/$userId');
+      final response = await dioClient.get('/users/check-in-status/$userId');
       final data = response.data;
       final List<dynamic> historyJson = data['history'] ?? [];
       final historyList = historyJson.map((e) => CheckInDay.fromJson(e)).toList();
@@ -100,7 +96,7 @@ class DailyCheckInNotifier extends Notifier<CheckInState> {
   Future<int?> performCheckIn(String userId) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final response = await _dio.post('/check-in', data: {
+      final response = await dioClient.post('/users/check-in', data: {
         "userId": userId,
       });
       final data = response.data;

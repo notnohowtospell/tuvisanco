@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/network/dio_client.dart';
 import '../../../core/widgets/daily_check_in_dialog.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -28,8 +29,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (auth.userId == null) return;
     setState(() => _isLoading = true);
     try {
-      final dio = Dio();
-      final response = await dio.get('http://10.0.2.2:3000/users/${auth.userId}');
+      final response = await dioClient.get('/users/${auth.userId}');
       if (mounted) {
         setState(() {
           _profileData = response.data;

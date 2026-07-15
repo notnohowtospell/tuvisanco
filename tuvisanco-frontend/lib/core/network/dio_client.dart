@@ -1,14 +1,22 @@
 import 'package:dio/dio.dart';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 
-// IP máy ảo Android để kết nối tới Backend host (chạy ở cổng 3000)
-const String _baseUrl = 'http://10.0.2.2:3000';
+String get baseUrl {
+  if (kIsWeb) {
+    return 'http://127.0.0.1:3005';
+  }
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    // Android emulator needs 10.0.2.2 to access localhost of the host machine
+    return 'http://10.0.2.2:3005';
+  }
+  return 'http://127.0.0.1:3005';
+}
 
 final dioClient = Dio(
   BaseOptions(
-    baseUrl: _baseUrl,
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 10),
+    baseUrl: baseUrl,
+    connectTimeout: const Duration(seconds: 15),
+    receiveTimeout: const Duration(seconds: 15),
     headers: {
       'Content-Type': 'application/json',
     },

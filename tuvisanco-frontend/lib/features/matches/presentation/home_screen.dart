@@ -4,9 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
-import '../../../core/providers/auth_provider.dart';
 import '../data/match_model.dart';
-import 'league_filter_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -51,6 +49,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
       return [];
     } catch (e) {
+      print('LỖI FETCH MATCHES: $e');
       return [];
     }
   }
@@ -236,6 +235,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         groups[m.leagueName] = [];
       }
       groups[m.leagueName]!.add(m);
+    }
+
+    if (groups.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Text('Không có trận đấu nào.', style: TextStyle(color: Colors.white38)),
+        ),
+      );
     }
 
     return ListView.builder(
@@ -442,7 +450,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return Icon(Icons.shield, color: fallbackColor, size: size);
     }
     final originalUrl = url.trim();
-    final proxiedUrl = 'http://10.0.2.2:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
+    final proxiedUrl = '$baseUrl/matches/proxy/image?url=${Uri.encodeComponent(originalUrl)}';
     
     return ClipRRect(
       borderRadius: BorderRadius.circular(2),

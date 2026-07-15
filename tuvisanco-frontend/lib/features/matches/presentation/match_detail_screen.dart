@@ -36,6 +36,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> with SingleTicker
 
   Future<void> _fetchMatchDetails() async {
     try {
+      print('REQUESTING: /matches/${widget.matchId} with baseUrl: ${dioClient.options.baseUrl}');
       final response = await dioClient.get('/matches/${widget.matchId}');
       if (response.statusCode == 200) {
         setState(() {
@@ -49,6 +50,7 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> with SingleTicker
         });
       }
     } catch (e) {
+      print('LỖI CHI TIẾT TRẬN ĐẤU: $e');
       setState(() {
         _error = 'Không thể kết nối máy chủ';
         _isLoading = false;
@@ -60,8 +62,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> with SingleTicker
     if (url == null || url.isEmpty) {
       return Icon(Icons.shield, color: fallbackColor, size: size);
     }
-    final originalUrl = url.trim();
-    final proxiedUrl = 'http://10.0.2.2:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
+    
+    final originalUrl = url;
+    final proxiedUrl = '$baseUrl/matches/proxy/image?url=${Uri.encodeComponent(originalUrl)}';
     
     return ClipRRect(
       borderRadius: BorderRadius.circular(size / 8),

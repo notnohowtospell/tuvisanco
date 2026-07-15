@@ -1,11 +1,12 @@
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import '../../../core/network/dio_client.dart';
 
 class SocketService {
   late IO.Socket socket;
 
   void connect(String roomCode) {
     // Kết nối tới WebSockets Namespace 'lobbies' trên Backend
-    socket = IO.io('http://10.0.2.2:3000/lobbies', <String, dynamic>{
+    socket = IO.io('$baseUrl/lobbies', <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
     });

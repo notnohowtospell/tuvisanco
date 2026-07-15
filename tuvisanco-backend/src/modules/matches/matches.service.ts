@@ -61,7 +61,7 @@ export class MatchesService {
       const response = await firstValueFrom(
         this.httpService.get(url, {
           headers: { Authorization: `Bearer ${this.apiKey}` },
-          timeout: 10000,
+          timeout: 3000,
         })
       );
       return response.data;
@@ -287,43 +287,40 @@ export class MatchesService {
     const dbMatch = await this.prisma.match.findUnique({ where: { id } });
     if (!dbMatch) throw new NotFoundException('Match not found in DB');
 
-    // 2. Fetch dữ liệu chuyên sâu (Lineups, Stats, Match Details) on-demand
-    try {
-      const detail = await this.callApi(`/football/matches/${dbMatch.apiFootballId}`);
-      if (detail && detail.data) {
-        dbMatch.stadium = detail.data.venue?.name || dbMatch.stadium;
-        dbMatch.referee = detail.data.referee || dbMatch.referee;
-      }
-    } catch(e) { /* ignore */ }
+    // 2. Fetch dữ liệu chuyên sâu (Lineups, Stats, Match Details) on-demand in parallel
+    const [detailResult, statsResult, lineupsResult] = await Promise.allSettled([
+      this.callApi(`/football/matches/${dbMatch.apiFootballId}`),
+      this.callApi(`/football/matches/${dbMatch.apiFootballId}/stats`),
+      this.callApi(`/football/matches/${dbMatch.apiFootballId}/lineups`)
+    ]);
 
-    try {
-      const statsResponse = await this.callApi(`/football/matches/${dbMatch.apiFootballId}/stats`);
-      if (statsResponse && statsResponse.data) {
-        const stats = statsResponse.data;
-        const homeShots = stats.shots_on_target?.all?.home ?? stats.shots?.all?.home ?? 0;
-        const awayShots = stats.shots_on_target?.all?.away ?? stats.shots?.all?.away ?? 0;
-        const homeYellowCards = stats.yellow_cards?.all?.home ?? 0;
-        const awayYellowCards = stats.yellow_cards?.all?.away ?? 0;
-        const homeRedCards = stats.red_cards?.all?.home ?? 0;
-        const awayRedCards = stats.red_cards?.all?.away ?? 0;
+    if (detailResult.status === 'fulfilled' && detailResult.value?.data) {
+      dbMatch.stadium = detailResult.value.data.venue?.name || dbMatch.stadium;
+      dbMatch.referee = detailResult.value.data.referee || dbMatch.referee;
+    }
 
-        dbMatch.homeShots = homeShots;
-        dbMatch.awayShots = awayShots;
-        dbMatch.homeYellowCards = homeYellowCards;
-        dbMatch.awayYellowCards = awayYellowCards;
-        dbMatch.homeRedCards = homeRedCards;
-        dbMatch.awayRedCards = awayRedCards;
-        dbMatch.teamStats = stats as any; // Cache lại nguyên mảng stat JSON (xG, fouls...)
-      }
-    } catch(e) { /* ignore 404 nếu trận chưa đá */ }
+    if (statsResult.status === 'fulfilled' && statsResult.value?.data) {
+      const stats = statsResult.value.data;
+      const homeShots = stats.shots_on_target?.all?.home ?? stats.shots?.all?.home ?? 0;
+      const awayShots = stats.shots_on_target?.all?.away ?? stats.shots?.all?.away ?? 0;
+      const homeYellowCards = stats.yellow_cards?.all?.home ?? 0;
+      const awayYellowCards = stats.yellow_cards?.all?.away ?? 0;
+      const homeRedCards = stats.red_cards?.all?.home ?? 0;
+      const awayRedCards = stats.red_cards?.all?.away ?? 0;
 
-    try {
-      const lineupsResponse = await this.callApi(`/football/matches/${dbMatch.apiFootballId}/lineups`);
-      if (lineupsResponse && lineupsResponse.data) {
-        dbMatch.lineupHome = lineupsResponse.data.home as any;
-        dbMatch.lineupAway = lineupsResponse.data.away as any;
-      }
-    } catch(e) { /* ignore 404 */ }
+      dbMatch.homeShots = homeShots;
+      dbMatch.awayShots = awayShots;
+      dbMatch.homeYellowCards = homeYellowCards;
+      dbMatch.awayYellowCards = awayYellowCards;
+      dbMatch.homeRedCards = homeRedCards;
+      dbMatch.awayRedCards = awayRedCards;
+      dbMatch.teamStats = stats as any; // Cache lại nguyên mảng stat JSON (xG, fouls...)
+    }
+
+    if (lineupsResult.status === 'fulfilled' && lineupsResult.value?.data) {
+      dbMatch.lineupHome = lineupsResult.value.data.home as any;
+      dbMatch.lineupAway = lineupsResult.value.data.away as any;
+    }
 
     // 3. Cập nhật các thông tin mới lấy được vào DB để Cache cho lần sau
     await this.prisma.match.update({

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/network/dio_client.dart';
 import '../data/lobbies_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -55,7 +56,7 @@ class _RoomDashboardScreenState extends ConsumerState<RoomDashboardScreen> {
       return Icon(Icons.shield, color: fallbackColor, size: size);
     }
     final originalUrl = url.trim();
-    final proxiedUrl = 'http://10.0.2.2:3000/matches/proxy/image?url=' + Uri.encodeComponent(originalUrl);
+    final proxiedUrl = '$baseUrl/matches/proxy/image?url=${Uri.encodeComponent(originalUrl)}';
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(size / 8),
