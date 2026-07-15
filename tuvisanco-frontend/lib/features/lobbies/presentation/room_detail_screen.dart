@@ -135,6 +135,34 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            Widget buildQuickBetChip(String label, int val, int maxLimit, {bool isAllIn = false}) {
+              return InkWell(
+                onTap: () {
+                  setModalState(() {
+                    if (isAllIn) {
+                      _betPointsController.text = val.toString();
+                    } else {
+                      int current = int.tryParse(_betPointsController.text) ?? 10;
+                      int newVal = (current + val).clamp(10, maxLimit);
+                      _betPointsController.text = newVal.toString();
+                    }
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceElevated,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    border: Border.all(color: AppTheme.surfaceBorder),
+                  ),
+                  child: Text(
+                    label,
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              );
+            }
+
             final int points = int.tryParse(_betPointsController.text) ?? 10;
             final double odd = (option['odd'] as num).toDouble();
             final int potentialPayout = (points * odd).floor();
@@ -205,7 +233,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Ô nhập cược
+                    // Ô nhập cược và Slider cược nhanh
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -217,21 +245,73 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    TextField(
-                      controller: _betPointsController,
-                      keyboardType: TextInputType.number,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: AppTheme.surfaceElevated,
-                        suffixText: "Điểm",
-                        suffixStyle: const TextStyle(color: AppTheme.textSecondary),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceElevated,
+                        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                        border: Border.all(color: AppTheme.surfaceBorder),
                       ),
-                      onChanged: (val) {
-                        setModalState(() {});
-                      },
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _betPointsController,
+                              keyboardType: TextInputType.number,
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              onChanged: (val) {
+                                setModalState(() {});
+                              },
+                            ),
+                          ),
+                          const Text(
+                            'pts',
+                            style: TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(height: 16),
+                    // Thanh trượt cược nhanh (Slider)
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: AppTheme.primary,
+                        inactiveTrackColor: AppTheme.surfaceElevated,
+                        thumbColor: AppTheme.warning,
+                        overlayColor: AppTheme.warning.withOpacity(0.2),
+                        valueIndicatorColor: AppTheme.primary,
+                        valueIndicatorTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      child: Slider(
+                        value: points.toDouble().clamp(10.0, maxBetLimit.toDouble()),
+                        min: 10.0,
+                        max: maxBetLimit.toDouble(),
+                        divisions: maxBetLimit > 10 ? (maxBetLimit - 10) : 1,
+                        onChanged: (val) {
+                          setModalState(() {
+                            _betPointsController.text = val.round().toString();
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Nút chọn nhanh (Chips)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        buildQuickBetChip('+10', 10, maxBetLimit),
+                        buildQuickBetChip('+50', 50, maxBetLimit),
+                        buildQuickBetChip('+100', 100, maxBetLimit),
+                        buildQuickBetChip('All-in', maxBetLimit, maxBetLimit, isAllIn: true),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                     if (isBetInvalid)
                       Padding(
                         padding: const EdgeInsets.only(top: 6.0),
@@ -815,6 +895,11 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                             const SizedBox(height: 12),
                             Row(
                               children: options.map((opt) {
+                                final bool isHomeTeamOption = room['match'] != null &&
+                                    opt['label'].toString().trim().toLowerCase() == room['match']['homeTeam'].toString().trim().toLowerCase();
+                                final bool isAwayTeamOption = room['match'] != null &&
+                                    opt['label'].toString().trim().toLowerCase() == room['match']['awayTeam'].toString().trim().toLowerCase();
+
                                 return Expanded(
                                   child: Container(
                                     margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -835,7 +920,26 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                                       child: Column(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Text(opt['label'], style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              if (isHomeTeamOption) ...[
+                                                _teamLogo(room['match']['homeLogo'], Colors.blue, size: 16),
+                                                const SizedBox(width: 4),
+                                              ] else if (isAwayTeamOption) ...[
+                                                _teamLogo(room['match']['awayLogo'], Colors.red, size: 16),
+                                                const SizedBox(width: 4),
+                                              ],
+                                              Flexible(
+                                                child: Text(
+                                                  opt['label'],
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                           const SizedBox(height: 2),
                                           Text('x${opt['odd']}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                                         ],
